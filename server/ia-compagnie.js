@@ -56,7 +56,7 @@ export default {
       const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
         headers: { 'content-type': 'application/json', authorization: 'Bearer ' + env.GROQ_KEY },
-        body: JSON.stringify({ model, messages, temperature: 0.3, max_tokens: Math.min(+b.maxTokens || MAX_TOKENS, MAX_TOKENS) }),
+        body: JSON.stringify({ model, messages, temperature: 0.3, max_tokens: Math.min(+b.maxTokens || MAX_TOKENS, MAX_TOKENS) * (/gpt-oss|qwen3/.test(model) ? 3 : 1), ...(/gpt-oss/.test(model) ? { reasoning_effort: 'low' } : {}) }), // modèles qui « réfléchissent » : un peu plus de place
       });
       const j = await r.json().catch(() => ({}));
       const text = j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content;
