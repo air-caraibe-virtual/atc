@@ -681,6 +681,7 @@
     }
     // Pour le moteur ATC : le joueur peut-il décoller / atterrir ?
     departureBlock() {
+      if (this.engine && this.engine.flags && this.engine.flags.emergency) return null;
       if (!this.enabled || !this.ctx || this.ctx.side !== 'dep') return null;
       const strip = this.ctx.P.strip;
       const occ = this.runwayOccupant(null, strip);
@@ -691,6 +692,7 @@
       return null;
     }
     landingBlock() {
+      if (this.engine && this.engine.flags && this.engine.flags.emergency) return null; // urgence : priorité à l'atterrissage
       if (!this.enabled || !this.ctx) return null;
       const occ = this.runwayOccupant(null, this.ctx.P.strip);
       return occ ? { who: occ, reason: occ.kind === 'arr' ? 'landing' : 'departure' } : null;

@@ -571,6 +571,22 @@
       const rb = this.M(this.fq(st.freq), ',', this.T('au revoir', 'good day'), ',', this.cs());
       this._instruct(msg, rb, () => { this.station = st; if (after) after(); this.onChange(); });
     }
+    // Échange libre (IA) : le message du pilote puis la réponse du contrôleur, sans changer le déroulement du vol.
+    // Règle OACI : une langue que le contrôleur ne comprend pas reçoit « say again in English ».
+    freeExchange(pilotText, atcText, lang) {
+      if (!this.flight || this.busy) return false;
+      const L = RADIO_LANGS.includes(lang) ? lang : this.lang;
+      if (pilotText) this.withLang(L, () => this._pilot({ text: pilotText, speech: pilotText }));
+      if (this.radioMode === 'auto' && L !== 'en' && L !== this.stationLang()) {
+        this.withLang('en', () => this._atc(this.M(this.cs(), ',', 'I do not understand, say again in English.')));
+        return false;
+      }
+      if (this.radioMode === 'auto') this.setLang(L);
+      if (atcText) this.withLang(L, () => this._atc({ text: atcText, speech: atcText }));
+      return true;
+    }
+    // urgence déclarée : priorité absolue (le trafic IA s'écarte)
+    declareEmergency(kind) { this.flags.emergency = kind === 'mayday' ? 'mayday' : 'panpan'; this.onChange(); }
     // « répétez » quand le message n'a pas été compris (micro)
     sayAgain() {
       if (!this.flight || this.busy) return;

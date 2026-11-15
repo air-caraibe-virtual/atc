@@ -742,6 +742,37 @@ ipcMain.handle('update-install', async (_e, url, version) => {
   } catch (e) { return { ok: false, error: String(e.message || e) }; }
 });
 
+// ---------- IA (clé API du pilote) : Claude, OpenAI ou Groq ----------
+ipcMain.handle('ai-chat', async (_e, o) => {
+  const { provider, key, model, system, messages, maxTokens } = o || {};
+  if (!key) return { ok: false, error: 'Aucune clé API dans les paramètres.' };
+  const ctl = new AbortController(); const to = setTimeout(() => ctl.abort(), 20000);
+  try {
+    let r, j;
+    if (provider === 'anthropic') {
+      r = await net.fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST', signal: ctl.signal,
+        headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
+        body: JSON.stringify({ model: model || 'claude-haiku-5-5', max_tokens: maxTokens || 400, system, messages }),
+      });
+      j = await r.json().catch(() => ({}));
+      if (!r.ok) return { ok: false, status: r.status, error: (j.error && j.error.message) || ('HTTP ' + r.status) };
+      return { ok: true, text: (j.content || []).map((c) => c.text || '').join('') };
+    }
+    const url = provider === 'groq' ? 'https://api.groq.com/openai/v1/chat/completions' : 'https://api.openai.com/v1/chat/completions';
+    r = await net.fetch(url, {
+      method: 'POST', signal: ctl.signal,
+      headers: { 'content-type': 'application/json', authorization: 'Bearer ' + key },
+      body: JSON.stringify({ model: model || (provider === 'groq' ? 'llama-3.3-70b-versatile' : 'gpt-4o-mini'), max_tokens: maxTokens || 400, temperature: 0.3, messages: [{ role: 'system', content: system }, ...messages] }),
+    });
+    j = await r.json().catch(() => ({}));
+    if (!r.ok) return { ok: false, status: r.status, error: (j.error && j.error.message) || ('HTTP ' + r.status) };
+    return { ok: true, text: (j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '' };
+  } catch (e) {
+    return { ok: false, error: e.name === 'AbortError' ? 'pas de réponse (délai dépassé)' : String(e.message || e) };
+  } finally { clearTimeout(to); }
+});
+
 // ---------- Micro : reconnaissance vocale (Whisper hors ligne) ----------
 const sttDir = () => path.join(app.getPath('userData'), 'models');
 const sttProgress = (p) => send('stt-progress', p);

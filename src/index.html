@@ -108,6 +108,11 @@
       <div id="notice" class="notice hidden"></div>
       <div id="speakBar" class="speak-bar hidden"></div>
       <div id="actions" class="actions"></div>
+      <div id="freeBar" class="free-bar hidden">
+        <select id="freeTo" title="À qui parlez-vous ?"><option value="atc">Contrôleur</option><option value="copilot">Copilote</option></select>
+        <input id="freeText" type="text" autocomplete="off" placeholder="Écrivez librement : « on demande un direct BADEP », « mayday moteur en feu », « copilote, quelle fréquence pour Nice ? »…">
+        <button id="freeSend" class="mini">Envoyer</button>
+      </div>
     </section>
   </main>
 
@@ -166,6 +171,45 @@
     </div>
   </div>
 
+  <!-- Aide : obtenir et ajouter une clé API pour l'IA -->
+  <div id="dlgAiHelp" class="overlay hidden">
+    <div class="dialog wide">
+      <div class="dlg-head"><h3>Ajouter l'IA dans ATC</h3><button class="ghost icon" data-close>✕</button></div>
+      <p class="hint">L'IA a besoin d'une « clé API » : un code personnel qui permet à ATC d'utiliser une intelligence artificielle en ligne. Choisissez un fournisseur ci-dessous, suivez les étapes, puis collez la clé dans ATC.</p>
+      <div class="ai-tabs">
+        <button class="ai-tab active" data-p="groq">Groq — gratuit (conseillé pour commencer)</button>
+        <button class="ai-tab" data-p="anthropic">Claude — le plus malin (payant)</button>
+        <button class="ai-tab" data-p="openai">OpenAI (payant)</button>
+      </div>
+      <ol class="ai-steps" data-p="groq">
+        <li><b>Ouvrez la page des clés Groq</b> <button class="mini" data-url="https://console.groq.com/keys">Ouvrir la page</button></li>
+        <li><b>Connectez-vous</b> : « Sign in » avec un compte Google ou une adresse e-mail. C'est gratuit, aucune carte bancaire demandée.</li>
+        <li><b>Créez la clé</b> : cliquez sur <i>Create API Key</i>, donnez-lui un nom (par exemple « ATC »), puis <i>Submit</i>.</li>
+        <li><b>Copiez la clé</b> qui s'affiche (elle commence par <code>gsk_</code>). Attention : elle n'est montrée qu'une seule fois.</li>
+        <li><b>Revenez dans ATC</b> et cliquez sur <b>📋 Coller</b> à côté de « Clé API ». Le fournisseur se règle tout seul.</li>
+        <li><b>Cliquez sur « Tester la clé »</b> : « ✅ La clé fonctionne » et c'est terminé.</li>
+      </ol>
+      <ol class="ai-steps hidden" data-p="anthropic">
+        <li><b>Ouvrez la console Claude</b> <button class="mini" data-url="https://platform.claude.com/settings/keys">Ouvrir la page</button></li>
+        <li><b>Créez un compte</b> ou connectez-vous.</li>
+        <li><b>Ajoutez un peu de crédit</b> dans <i>Billing</i> (5 € suffisent pour des centaines de vols : un message coûte une fraction de centime).</li>
+        <li><b>Créez la clé</b> : <i>Create key</i>, nommez-la « ATC », validez.</li>
+        <li><b>Copiez la clé</b> (elle commence par <code>sk-ant-</code>). Elle n'est montrée qu'une seule fois.</li>
+        <li><b>Revenez dans ATC</b>, cliquez sur <b>📋 Coller</b>, puis sur <b>« Tester la clé »</b>.</li>
+      </ol>
+      <ol class="ai-steps hidden" data-p="openai">
+        <li><b>Ouvrez la page des clés OpenAI</b> <button class="mini" data-url="https://platform.openai.com/api-keys">Ouvrir la page</button></li>
+        <li><b>Créez un compte</b> ou connectez-vous.</li>
+        <li><b>Ajoutez un peu de crédit</b> dans <i>Billing</i> (quelques euros suffisent).</li>
+        <li><b>Créez la clé</b> : <i>Create new secret key</i>, nommez-la « ATC ».</li>
+        <li><b>Copiez la clé</b> (elle commence par <code>sk-</code>). Elle n'est montrée qu'une seule fois.</li>
+        <li><b>Revenez dans ATC</b>, cliquez sur <b>📋 Coller</b>, puis sur <b>« Tester la clé »</b>.</li>
+      </ol>
+      <p class="hint">🔒 La clé reste uniquement sur votre PC : ATC ne l'envoie qu'au fournisseur choisi. Ne la partagez avec personne (même pas sur Discord). Si vous pensez qu'elle a fuité, supprimez-la sur la page du fournisseur et créez-en une nouvelle.</p>
+      <div class="row end"><button class="primary" data-close>J'ai compris</button></div>
+    </div>
+  </div>
+
   <!-- Paramètres -->
   <div id="dlgSettings" class="overlay hidden">
     <div class="dialog">
@@ -188,6 +232,15 @@
       <label class="check">Nombre d'avions IA (trafic réel) <select id="setTrafficMax" class="mini-sel" style="margin-left:8px"><option value="4">4</option><option value="8">8</option><option value="12">12</option><option value="16">16</option><option value="24">24</option><option value="32">32</option></select></label>
       <label class="check"><input type="checkbox" id="setFsltl"> <span>Utiliser les avions FSLTL en priorité pour le trafic réel</span></label>
       <label class="check"><input type="checkbox" id="setAutoRb"> <span>Collationner automatiquement les instructions</span></label>
+      <div class="ai-box">
+        <b>Intelligence artificielle (facultatif)</b>
+        <small>Comprend tout ce que vous dites, répond comme un vrai contrôleur, gère les urgences et joue le copilote. Utilise votre propre clé API : elle reste sur votre PC, chaque message coûte une fraction de centime (Groq a un accès gratuit limité).</small>
+        <label><span>Fournisseur</span><select id="setAiProvider"><option value="">Désactivée</option><option value="anthropic">Claude (Anthropic)</option><option value="openai">OpenAI</option><option value="groq">Groq (accès gratuit limité)</option></select></label>
+        <div class="ai-help-row"><button id="btnAiHelp" class="primary mini">❓ Comment obtenir et ajouter ma clé (3 minutes)</button></div>
+        <label><span>Clé API</span><span class="ai-key-row"><input id="setAiKey" type="password" autocomplete="off" placeholder="Collez votre clé ici"><button id="btnAiPaste" class="mini ghost" title="Coller la clé copiée">📋 Coller</button></span></label>
+        <label><span>Modèle (laisser vide = conseillé)</span><input id="setAiModel" type="text" autocomplete="off" placeholder=""></label>
+        <div class="ai-test"><button id="btnAiTest" class="mini">Tester la clé</button><span id="aiTestRes"></span></div>
+      </div>
       <label class="check"><input type="checkbox" id="setMic"> <span>Parler au micro (reconnaissance vocale sur le PC, modèle téléchargé une seule fois)</span></label>
       <label><span>Reconnaissance vocale</span>
         <select id="setMicModel"><option value="small">Précise (recommandée, 250 Mo)</option><option value="base">Rapide (PC modeste, 80 Mo, moins précise)</option></select></label>
@@ -211,6 +264,7 @@
   <script src="traffic.js"></script>
   <script src="map.js"></script>
   <script src="voicematch.js"></script>
+  <script src="ai.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

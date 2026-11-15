@@ -6,7 +6,7 @@
   const api = window.sim || null; // absent si la page est ouverte hors de l'appli
 
   // ---------- Paramètres ----------
-  const DEFAULTS = { lang: 'fr', ttsEngine: 'neural', neuralVoice: 'auto', voice: '', rate: 1.05, volume: 1, radioFx: 'medium', squelch: true, pilotVoice: false, requireCom: false, autoCom: true, autoXpdr: true, autoReadback: true, autoPush: true, traffic: false, sbUser: '', mute: false, radioMode: 'auto', mic: false, micKey: 'Ctrl+Space', micModel: 'small', trafficMax: 16, v: 5 };
+  const DEFAULTS = { lang: 'fr', ttsEngine: 'neural', neuralVoice: 'auto', voice: '', rate: 1.05, volume: 1, radioFx: 'medium', squelch: true, pilotVoice: false, requireCom: false, autoCom: true, autoXpdr: true, autoReadback: true, autoPush: true, traffic: false, sbUser: '', mute: false, radioMode: 'auto', mic: false, micKey: 'Ctrl+Space', micModel: 'small', aiProvider: '', aiKey: '', aiModel: '', trafficMax: 16, v: 5 };
   let S = { ...DEFAULTS };
   let stored = {};
   try { stored = JSON.parse(localStorage.getItem('atcsolo') || '{}') || {}; S = { ...DEFAULTS, ...stored }; } catch (_) {}
@@ -218,11 +218,14 @@
   if ('speechSynthesis' in window) { loadVoices(); speechSynthesis.onvoiceschanged = loadVoices; } else fillVoiceSelect();
 
   // ---------- Radio (journal) ----------
+  let aiBusy = false;
+  const radioHist = []; // derniers échanges, pour que l'IA suive la conversation
   function addMessage(m) {
     if (m.from === 'atc' && !m.atis) {
       const box = $('mapLastAtc');
       if (box) { box.innerHTML = '<small></small><span></span>'; box.children[0].textContent = (m.station || 'ATC') + (m.freq ? ' · ' + utils.freqTxt(m.freq) : ''); box.children[1].textContent = m.text; box.classList.remove('hidden'); }
     }
+    if (m.from !== 'system' && m.text) { radioHist.push({ from: m.from === 'pilot' ? 'pilot' : m.from === 'copilot' ? 'copilot' : m.from === 'aipilot' ? 'other aircraft' : 'atc', text: m.text }); if (radioHist.length > 20) radioHist.shift(); }
     const log = $('log');
     const empty = log.querySelector('.empty'); if (empty) empty.remove();
     const el = document.createElement('div');
@@ -347,6 +350,8 @@
     } else notice.classList.add('hidden');
 
     renderSpeak();
+    if ($('freeBar')) $('freeBar').classList.toggle('hidden', !(engine.flight || aiOn()));
+    if (aiBusy) { const w = document.createElement('span'); w.className = 'waiting'; w.textContent = 'Le contrôleur réfléchit'; box.appendChild(w); return; }
     if (engine.busy) { const w = document.createElement('span'); w.className = 'waiting'; w.textContent = 'Le contrôleur répond'; box.appendChild(w); return; }
     if (!engine.flight) { const b = document.createElement('button'); b.className = 'primary'; b.textContent = 'Charger un vol'; b.onclick = openFlight; box.appendChild(b); return; }
     if (engine.phase === 'DONE') { const b = document.createElement('button'); b.className = 'primary'; b.textContent = 'Nouveau vol'; b.onclick = openFlight; box.appendChild(b); return; }
@@ -490,11 +495,117 @@
     Mic.nothingAt = Date.now();
     addMessage({ from: 'system', text: 'Micro : rien entendu.' });
   }
-  function handleSpeech(r) {
+  // ---------- IA (facultative, clé API du pilote) ----------
+  const aiOn = () => !!(S.aiProvider && S.aiKey && api && api.aiChat && window.AtcAI);
+  function aiHint() {
+    const p = window.AtcAI && AtcAI.PROVIDERS[S.aiProvider];
+    if ($('setAiModel')) $('setAiModel').placeholder = p ? p.model : '';
+    if ($('setAiKey')) $('setAiKey').placeholder = p ? p.keyHint : 'Choisissez d\'abord un fournisseur';
+    $('freeBar') && $('freeBar').classList.toggle('hidden', !aiOn() && !engine.flight);
+  }
+  async function aiAsk(system, messages, maxTokens) {
+    const p = AtcAI.PROVIDERS[S.aiProvider];
+    return api.aiChat({ provider: S.aiProvider, key: S.aiKey, model: S.aiModel || (p && p.model), system, messages, maxTokens });
+  }
+  // Renvoie true si l'IA a traité le message
+  async function aiHandle(said, mode, detected) {
+    if (!aiOn() || aiBusy) return false;
+    const copilot = mode === 'copilot' || /^\s*(co-?pilote?|copilot)\b/i.test(said);
+    const ctx = AtcAI.context(engine, engine.flight ? null : { note: 'no flight plan loaded yet' }) || { note: 'no flight plan loaded yet' };
+    if (detected) ctx.detected_language = detected;
+    const { system, messages } = AtcAI.buildMessages(ctx, said, copilot ? 'copilot' : 'atc', radioHist);
+    aiBusy = true; render();
+    let r; try { r = await aiAsk(system, messages); } catch (e) { r = { ok: false, error: e.message }; }
+    aiBusy = false; render();
+    if (!r || !r.ok) { addMessage({ from: 'system', text: 'IA indisponible (' + ((r && r.error) || 'erreur') + ') : compréhension classique utilisée.' }); return false; }
+    const d = AtcAI.parse(r.text);
+    if (!d || !d.type) return false;
+    // le contrôleur parle encore : on attend qu'il ait fini (10 s au plus) avant de répondre
+    if (d.type !== 'copilot') for (let i = 0; i < 40 && engine.busy; i++) await new Promise((ok) => setTimeout(ok, 250));
+    const auto = S.radioMode === 'auto';
+    switch (d.type) {
+      case 'copilot':
+        if (!d.answer) return false;
+        addMessage({ from: 'copilot', station: 'Copilote', text: d.answer });
+        say(d.answer, { pilot: true, station: 'copilote', lang: S.lang });
+        return true;
+      case 'action': {
+        if (!engine.flight) return false;
+        const act = engine.actions().find((a) => a.id === d.action);
+        if (!act) return false;
+        if (auto && d.lang && d.action !== 'readback') engine.setSpeak(d.lang);
+        if (act.needsLevel) {
+          const lvl = Number(d.level); const ok = act.options && act.options.includes(lvl);
+          if (!ok) { openLevel(act.options); return true; }
+          engine.pilotAction(act.id, lvl); return true;
+        }
+        engine.pilotAction(act.id); return true;
+      }
+      case 'reply':
+        if (!engine.flight || !d.atc) return false;
+        if (auto && d.lang) engine.setSpeak(d.lang);
+        engine.freeExchange(d.pilot || said, d.atc, d.lang);
+        return true;
+      case 'emergency':
+        if (!engine.flight) return false;
+        engine.declareEmergency(d.kind);
+        if (auto && d.lang) engine.setSpeak(d.lang);
+        engine.freeExchange(d.pilot || said, d.atc, d.lang);
+        if (d.kind === 'mayday' && S.autoXpdr && api.setSquawk) api.setSquawk('7700');
+        addMessage({ from: 'system', text: d.kind === 'mayday' ? 'MAYDAY déclaré : transpondeur 7700, priorité absolue, le trafic s\'écarte.' : 'PAN-PAN déclaré : priorité à l\'atterrissage.' });
+        return true;
+      case 'say_again':
+        if (!engine.flight) return false;
+        engine.sayAgain(); return true;
+      default: return false;
+    }
+  }
+  // Message écrit (barre « Écrivez librement »)
+  async function sendFree() {
+    const t = $('freeText').value.trim(); if (!t) return;
+    $('freeText').value = '';
+    const mode = $('freeTo').value;
+    if (mode === 'copilot' && !aiOn()) { addMessage({ from: 'system', text: 'Le copilote a besoin de l\'IA : ajoutez une clé API dans les paramètres.' }); return; }
+    if (await aiHandle(t, mode, null)) return;
+    if (!engine.flight) { addMessage({ from: 'system', text: 'Chargez d\'abord un plan de vol.' }); return; }
+    handleSpeech({ ok: true, detected: null, results: [{ lang: null, text: t }] }, true);
+  }
+  $('freeSend').onclick = sendFree;
+  $('freeText').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); sendFree(); } });
+  // clé collée : le fournisseur se déduit de son début (gsk_ = Groq, sk-ant- = Claude, sk- = OpenAI)
+  function aiDetect(key) { return /^gsk_/.test(key) ? 'groq' : /^sk-ant-/.test(key) ? 'anthropic' : /^sk-/.test(key) ? 'openai' : null; }
+  function aiSetKey(key) {
+    key = String(key || '').trim().replace(/\s+/g, '');
+    S.aiKey = key; const p = aiDetect(key); if (p) S.aiProvider = p;
+    save(); $('setAiKey').value = key; $('setAiProvider').value = S.aiProvider || ''; aiHint(); render();
+    $('aiTestRes').textContent = key ? (p ? `Clé ${AtcAI.PROVIDERS[p].name} reconnue — cliquez sur « Tester la clé ».` : 'Clé collée : choisissez le fournisseur.') : '';
+  }
+  $('btnAiPaste').onclick = async () => {
+    try { const t = await navigator.clipboard.readText(); if (t && t.trim()) aiSetKey(t); else $('aiTestRes').textContent = 'Le presse-papiers est vide : copiez d\'abord la clé.'; }
+    catch (_) { $('aiTestRes').textContent = 'Collez la clé dans le champ avec Ctrl+V.'; }
+  };
+  $('setAiKey').addEventListener('input', (e) => { const p = aiDetect(e.target.value.trim()); if (p && p !== S.aiProvider) { S.aiProvider = p; $('setAiProvider').value = p; aiHint(); } });
+  $('btnAiHelp').onclick = () => $('dlgAiHelp').classList.remove('hidden');
+  document.querySelectorAll('#dlgAiHelp .ai-tab').forEach((b) => (b.onclick = () => {
+    document.querySelectorAll('#dlgAiHelp .ai-tab').forEach((x) => x.classList.toggle('active', x === b));
+    document.querySelectorAll('#dlgAiHelp .ai-steps').forEach((o) => o.classList.toggle('hidden', o.dataset.p !== b.dataset.p));
+  }));
+  document.querySelectorAll('#dlgAiHelp [data-url]').forEach((b) => (b.onclick = () => { if (api && api.openUrl) api.openUrl(b.dataset.url); else window.open(b.dataset.url); }));
+  $('btnAiTest').onclick = async () => {
+    const out = $('aiTestRes');
+    if (!aiOn()) { out.textContent = 'Choisissez un fournisseur et collez une clé.'; return; }
+    out.textContent = 'Test…';
+    const r = await aiAsk('Reply with the single word OK.', [{ role: 'user', content: 'ping' }], 10);
+    out.textContent = r && r.ok ? '✅ La clé fonctionne' : '❌ ' + ((r && r.error) || 'erreur');
+  };
+
+  async function handleSpeech(r, typed) {
     if (!r || !r.ok) { addMessage({ from: 'system', text: 'Micro : reconnaissance impossible (' + ((r && r.error) || 'erreur') + ').' }); return; }
     const res = (r.results || []).filter((x) => x.text && x.text.replace(/[^\p{L}\p{N}]/gu, '').length > 1);
     if (!res.length) { micNothing(); return; }
-    addMessage({ from: 'system', text: `🎙 Entendu${r.detected ? ' (' + r.detected.toUpperCase() + ')' : ''} : « ${res[0].text} »` });
+    if (!typed) addMessage({ from: 'system', text: `🎙 Entendu${r.detected ? ' (' + r.detected.toUpperCase() + ')' : ''} : « ${res[0].text} »` });
+    // IA : elle comprend la phrase entière (si activée) ; sinon, compréhension classique ci-dessous
+    if (!typed && aiOn() && !VoiceMatch.isRadioCheck(res[0].text) && await aiHandle(res[0].text, 'atc', r.detected)) return;
     // essai radio : possible à tout moment, dans la langue détectée
     if (engine.flight && engine.station && !engine.busy && res.some((x) => VoiceMatch.isRadioCheck(x.text))) {
       if (S.radioMode === 'auto' && (r.detected || res[0].lang)) engine.setSpeak(r.detected || res[0].lang);
@@ -725,7 +836,7 @@
   if ($('btnQuit')) $('btnQuit').onclick = () => { if (api && api.quitApp) api.quitApp(); else window.close(); };
   $('btnSettings').onclick = () => {
     $('setLang').value = S.radioMode; $('setTts').value = S.ttsEngine; $('setFx').value = S.radioFx; fillVoiceSelect(); $('setRate').value = S.rate; $('setVol').value = S.volume;
-    $('setSquelch').checked = S.squelch; $('setPilotVoice').checked = S.pilotVoice; $('setCom').checked = S.requireCom; $('setAutoCom').checked = S.autoCom; $('setAutoXpdr').checked = S.autoXpdr; $('setAutoPush').checked = S.autoPush !== false; $('setTrafficMax').value = String(S.trafficMax || 16); $('setFsltl').checked = S.preferFsltl !== false; $('setAutoRb').checked = S.autoReadback; $('setMic').checked = !!S.mic; $('setMicModel').value = S.micModel || 'small'; pttShow();
+    $('setSquelch').checked = S.squelch; $('setPilotVoice').checked = S.pilotVoice; $('setCom').checked = S.requireCom; $('setAutoCom').checked = S.autoCom; $('setAutoXpdr').checked = S.autoXpdr; $('setAutoPush').checked = S.autoPush !== false; $('setTrafficMax').value = String(S.trafficMax || 16); $('setFsltl').checked = S.preferFsltl !== false; $('setAutoRb').checked = S.autoReadback; $('setAiProvider').value = S.aiProvider || ''; $('setAiKey').value = S.aiKey || ''; $('setAiModel').value = S.aiModel || ''; aiHint(); $('setMic').checked = !!S.mic; $('setMicModel').value = S.micModel || 'small'; pttShow();
     $('dlgSettings').classList.remove('hidden');
   };
   const bindSetting = (id, key, conv) => { $(id).onchange = (e) => { S[key] = conv(e.target); save(); if (key === 'radioMode') { S.lang = S.radioMode === 'en' ? 'en' : 'fr'; save(); setTimeout(fillVoiceSelect); engine.uiLang = S.lang; engine.setRadioMode(S.radioMode); } render(); }; };
@@ -740,6 +851,9 @@
   bindSetting('setCom', 'requireCom', (e) => e.checked);
   bindSetting('setAutoCom', 'autoCom', (e) => { autoTune.tries = 0; autoTune.warned = false; return e.checked; });
   bindSetting('setAutoRb', 'autoReadback', (e) => { $('chkAutoRb').checked = e.checked; return e.checked; });
+  bindSetting('setAiProvider', 'aiProvider', (e) => { setTimeout(aiHint); return e.value; });
+  bindSetting('setAiKey', 'aiKey', (e) => { setTimeout(aiHint); return e.value.trim().replace(/\s+/g, ''); });
+  bindSetting('setAiModel', 'aiModel', (e) => e.value.trim());
   bindSetting('setMic', 'mic', (e) => { setTimeout(micSetup); return e.checked; });
   bindSetting('setMicModel', 'micModel', (e) => { Mic.ready = false; Mic.announced = false; setTimeout(micSetup); return e.value; });
   // ---- Détection de la touche du micro (PTT) : clavier ou bouton de joystick ----
