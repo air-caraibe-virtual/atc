@@ -21,7 +21,9 @@
   const STOP = new Set(['de', 'du', 'la', 'le', 'les', 'the', 'a', 'to', 'el', 'en', 'al', 'der', 'die', 'das', 'il', 'di', 'o', 'da', 'do', 'et', 'and', 'y', 'und', 'e']);
 
   function norm(s) {
-    return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    return String(s || '')
+      .replace(/([a-z])([A-Z])/g, '$1 $2').replace(/([A-Za-z])(\d)/g, '$1 $2').replace(/(\d)([A-Za-z])/g, '$1 $2') // « Iberia60ZuluTango » -> mots séparés
+      .toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
       .replace(/(\d)\s*[.,]\s*(\d)/g, '$1$2') // 121.5 -> 1215
       .replace(/([a-z])-([a-z])/g, '$1$2') // push-back -> pushback
       .replace(/\b(push|start|take|read) (back|up|off)\b/g, '$1$2')
@@ -103,5 +105,9 @@
     return top;
   }
 
-  return { norm, tokens, similarity, parseLevel, best };
+  // « radio check » dans toutes les langues (reconnu même si le reste de la phrase est mal transcrit)
+  const RADIO_CHECK = /\b(radio ?check|radio ?chek|radiocheck|essai radio|test radio|prueba de radio|comprobacion de radio|funkprobe|funk ?check|prova radio|teste de radio)\b/;
+  function isRadioCheck(said) { return RADIO_CHECK.test(norm(said)); }
+
+  return { norm, tokens, similarity, parseLevel, best, isRadioCheck };
 });

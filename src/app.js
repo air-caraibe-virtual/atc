@@ -478,6 +478,11 @@
     const res = (r.results || []).filter((x) => x.text && x.text.replace(/[^\p{L}\p{N}]/gu, '').length > 1);
     if (!res.length) { micNothing(); return; }
     addMessage({ from: 'system', text: `🎙 Entendu${r.detected ? ' (' + r.detected.toUpperCase() + ')' : ''} : « ${res[0].text} »` });
+    // essai radio : possible à tout moment, dans la langue détectée
+    if (engine.flight && engine.station && !engine.busy && res.some((x) => VoiceMatch.isRadioCheck(x.text))) {
+      if (S.radioMode === 'auto' && (r.detected || res[0].lang)) engine.setSpeak(r.detected || res[0].lang);
+      engine.pilotAction('radio_check'); return;
+    }
     const acts = engine.actions();
     if (!acts.length) { addMessage({ from: 'system', text: 'Micro : rien à annoncer au contrôleur pour le moment.' }); return; }
     const auto = S.radioMode === 'auto';

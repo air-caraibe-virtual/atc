@@ -901,6 +901,7 @@
         case 'go_around': return this.M(cs, ',', this.T('remise de gaz', 'going around'));
         case 'vacated': return this.M(st, ',', cs, ',', this.T('piste', 'runway'), this.rwy('arr'), this.T('dégagée', 'vacated'));
         case 'on_stand': return this.M(cs, ',', this.T('au parking, merci et au revoir', 'on stand, thanks, good day'));
+        case 'radio_check': return this.station ? this.M(st, ',', cs, ',', this.T('essai radio', 'radio check', { es: 'prueba de radio', de: 'Radiocheck', it: 'prova radio', pt: 'teste de rádio' }), this.fq(this.station.freq)) : null;
       }
       return null;
     }
@@ -925,6 +926,12 @@
       this._pilot(msg);
       const f = this.flight, cs = this.cs();
       switch (id) {
+        case 'radio_check': {
+          // « je vous reçois 5 sur 5 » : ne change rien au déroulement du vol
+          const stName = this._st(this.station.role, this.station.side).name;
+          this._atc(this.M(cs, ',', { text: stName, speech: stName }, ',', this.T('je vous reçois 5 sur 5', 'readability 5', { es: 'le recibo 5', de: 'Verständlichkeit 5', it: 'vi ricevo 5', pt: 'leitura 5' })));
+          break;
+        }
         case 'readback': { const after = this.pending.after; this.pending = null; if (after) after(); break; }
         case 'req_clearance': {
           const sid = this.sid();
