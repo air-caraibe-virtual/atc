@@ -1,5 +1,6 @@
 // Icône et informations de version dans ATC.exe (utilisé par la publication automatique sur GitHub)
-const { rcedit } = require('rcedit');
+const rceditMod = require('rcedit');
+const rcedit = rceditMod.rcedit || rceditMod.default || rceditMod;
 const path = require('path');
 const v = require('../package.json').version;
 const num = v.split('-')[0];
