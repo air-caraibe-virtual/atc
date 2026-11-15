@@ -6,7 +6,7 @@
   const api = window.sim || null; // absent si la page est ouverte hors de l'appli
 
   // ---------- Paramètres ----------
-  const DEFAULTS = { lang: 'fr', ttsEngine: 'neural', neuralVoice: 'auto', voice: '', rate: 1.05, volume: 1, radioFx: 'medium', squelch: true, pilotVoice: false, requireCom: false, autoCom: true, autoXpdr: true, autoReadback: true, autoPush: true, traffic: false, sbUser: '', mute: false, radioMode: 'auto', mic: false, micKey: 'Ctrl+Space', trafficMax: 16, v: 5 };
+  const DEFAULTS = { lang: 'fr', ttsEngine: 'neural', neuralVoice: 'auto', voice: '', rate: 1.05, volume: 1, radioFx: 'medium', squelch: true, pilotVoice: false, requireCom: false, autoCom: true, autoXpdr: true, autoReadback: true, autoPush: true, traffic: false, sbUser: '', mute: false, radioMode: 'auto', mic: false, micKey: 'Ctrl+Space', micModel: 'small', trafficMax: 16, v: 5 };
   let S = { ...DEFAULTS };
   let stored = {};
   try { stored = JSON.parse(localStorage.getItem('atcsolo') || '{}') || {}; S = { ...DEFAULTS, ...stored }; } catch (_) {}
@@ -387,7 +387,7 @@
     if (Mic.ready || !api || !api.sttPrepare) return Mic.ready;
     if (Mic.preparing) return Mic.preparing;
     Mic.preparing = (async () => {
-      const r = await api.sttPrepare();
+      const r = await api.sttPrepare(S.micModel || 'small');
       Mic.preparing = null; Mic.prog = null;
       if (r && r.ok) { Mic.ready = true; return true; }
       addMessage({ from: 'system', text: `Micro : impossible de préparer la reconnaissance vocale (${(r && r.error) || 'erreur'}). Vérifiez la connexion Internet pour le premier téléchargement.` });
@@ -398,7 +398,7 @@
   function micSetup() {
     if (api && api.micShortcut) api.micShortcut(S.mic && !S.micJoy ? (S.micKey || null) : null).then((r) => { if (S.mic && S.micKey && r && !r.ok) addMessage({ from: 'system', text: `Micro : la touche ${S.micKey} est déjà prise par une autre application, choisissez-en une autre dans les paramètres.` }); });
     if (S.mic && !Mic.ready && !Mic.preparing) {
-      if (!Mic.announced) addMessage({ from: 'system', text: 'Micro activé : préparation de la reconnaissance vocale (premier lancement : téléchargement d\'environ 80 Mo, une seule fois).' });
+      if (!Mic.announced) addMessage({ from: 'system', text: `Micro activé : préparation de la reconnaissance vocale (premier lancement : téléchargement d'environ ${S.micModel === 'base' ? '80' : '250'} Mo, une seule fois).` });
       Mic.announced = true;
       micPrepare().then((ok) => { if (ok) addMessage({ from: 'system', text: 'Micro prêt : appuyez sur « 🎙 Parler » ou sur votre touche d\'alternat, dites votre message, puis relâchez (ou taisez-vous une seconde).' }); render(); });
     }
@@ -441,6 +441,21 @@
     Mic.state = 'rec'; render();
     micBeep(880);
   }
+  // Nettoyage avant reconnaissance : silences du début et de la fin coupés, volume remonté.
+  // Whisper invente souvent des mots dans les silences et comprend mal un micro trop faible.
+  function micClean(pcm) {
+    const F = 320; // tranches de 20 ms
+    const rms = []; let peak = 0;
+    for (let i = 0; i < pcm.length; i += F) { let e = 0; const n = Math.min(F, pcm.length - i); for (let k = 0; k < n; k++) { const v = pcm[i + k]; e += v * v; if (Math.abs(v) > peak) peak = Math.abs(v); } rms.push(Math.sqrt(e / n)); }
+    const loud = Math.max(...rms); if (loud < 0.008) return null; // rien que du silence
+    const thr = Math.max(0.006, loud * 0.12);
+    let a = rms.findIndex((x) => x > thr), b = rms.length - 1 - [...rms].reverse().findIndex((x) => x > thr);
+    a = Math.max(0, a - 15); b = Math.min(rms.length - 1, b + 20); // marges : 0,3 s avant, 0,4 s après
+    const out = pcm.slice(a * F, (b + 1) * F);
+    const g = Math.min(8, 0.9 / Math.max(1e-4, peak));
+    if (g > 1.05) for (let i = 0; i < out.length; i++) out[i] *= g;
+    return out.length >= 16000 * 0.3 ? out : null;
+  }
   // petit bip discret (début / fin de l'alternat), à la place du bruit de squelch
   function micBeep(f) {
     try { const ac = ctx(), o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime; o.frequency.value = f; g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.08 * S.volume, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.09); o.connect(g).connect(ac.destination); o.start(t); o.stop(t + 0.1); } catch (_) {}
@@ -460,6 +475,8 @@
     }
     Mic.stoppedAt = Date.now();
     if (cancel || pcm.length < 16000 * 0.4) { Mic.state = 'off'; render(); micNothing(); return; }
+    pcm = micClean(pcm);
+    if (!pcm) { Mic.state = 'off'; render(); micNothing(); return; }
     const langs = [engine.pilotLang(), 'en', engine.stationLang()];
     let r = null;
     try { r = await api.sttTranscribe(pcm, langs); } catch (e) { r = { ok: false, error: e.message }; }
@@ -498,8 +515,23 @@
       }
     }
     const cs = engine.cs(), st = engine.station;
-    const best = VoiceMatch.best(res, cands, [cs.text, cs.speech, st ? st.name : '', engine.flight.callsign]);
-    if (!best || best.score < 0.4) { engine.sayAgain(); return; }
+    const ignore = [cs.text, cs.speech, st ? st.name : '', engine.flight.callsign];
+    // 1) les mots-clés (« clearance », « taxi », « prêt au départ »…) : robustes même si l'indicatif est mal transcrit
+    const heard = res.map((x) => x.text).join(' ');
+    const ids = [...new Set(cands.map((c) => c.id))];
+    let best = null;
+    const intent = engine.pending ? null : VoiceMatch.bestIntent(heard, ids);
+    if (intent) {
+      // langue : celle détectée par la reconnaissance ; sinon celle dont la phrase ressemble le plus
+      const det = r.detected || (res.length === 1 ? res[0].lang : null);
+      const own = cands.filter((c) => c.id === intent.id);
+      best = (det && own.find((c) => c.lang === det)) || VoiceMatch.best(res, own, ignore) || own[0];
+      if (best) best = { ...best, score: 1 };
+    }
+    // 2) sinon, la phrase la plus ressemblante (collationnement, messages sans mot-clé)
+    if (!best) best = VoiceMatch.best(res, cands, ignore);
+    const minScore = engine.pending ? 0.25 : 0.33;
+    if (!best || best.score < minScore) { engine.sayAgain(); return; }
     if (auto && best.lang) engine.setSpeak(best.lang);
     if (best.needsLevel && !level) { openLevel(best.options); return; }
     engine.pilotAction(best.id, best.needsLevel ? level : undefined);
@@ -693,7 +725,7 @@
   if ($('btnQuit')) $('btnQuit').onclick = () => { if (api && api.quitApp) api.quitApp(); else window.close(); };
   $('btnSettings').onclick = () => {
     $('setLang').value = S.radioMode; $('setTts').value = S.ttsEngine; $('setFx').value = S.radioFx; fillVoiceSelect(); $('setRate').value = S.rate; $('setVol').value = S.volume;
-    $('setSquelch').checked = S.squelch; $('setPilotVoice').checked = S.pilotVoice; $('setCom').checked = S.requireCom; $('setAutoCom').checked = S.autoCom; $('setAutoXpdr').checked = S.autoXpdr; $('setAutoPush').checked = S.autoPush !== false; $('setTrafficMax').value = String(S.trafficMax || 16); $('setFsltl').checked = S.preferFsltl !== false; $('setAutoRb').checked = S.autoReadback; $('setMic').checked = !!S.mic; pttShow();
+    $('setSquelch').checked = S.squelch; $('setPilotVoice').checked = S.pilotVoice; $('setCom').checked = S.requireCom; $('setAutoCom').checked = S.autoCom; $('setAutoXpdr').checked = S.autoXpdr; $('setAutoPush').checked = S.autoPush !== false; $('setTrafficMax').value = String(S.trafficMax || 16); $('setFsltl').checked = S.preferFsltl !== false; $('setAutoRb').checked = S.autoReadback; $('setMic').checked = !!S.mic; $('setMicModel').value = S.micModel || 'small'; pttShow();
     $('dlgSettings').classList.remove('hidden');
   };
   const bindSetting = (id, key, conv) => { $(id).onchange = (e) => { S[key] = conv(e.target); save(); if (key === 'radioMode') { S.lang = S.radioMode === 'en' ? 'en' : 'fr'; save(); setTimeout(fillVoiceSelect); engine.uiLang = S.lang; engine.setRadioMode(S.radioMode); } render(); }; };
@@ -709,6 +741,7 @@
   bindSetting('setAutoCom', 'autoCom', (e) => { autoTune.tries = 0; autoTune.warned = false; return e.checked; });
   bindSetting('setAutoRb', 'autoReadback', (e) => { $('chkAutoRb').checked = e.checked; return e.checked; });
   bindSetting('setMic', 'mic', (e) => { setTimeout(micSetup); return e.checked; });
+  bindSetting('setMicModel', 'micModel', (e) => { Mic.ready = false; Mic.announced = false; setTimeout(micSetup); return e.value; });
   // ---- Détection de la touche du micro (PTT) : clavier ou bouton de joystick ----
   const KEYNAME = { ' ': 'Space', ArrowUp: 'Up', ArrowDown: 'Down', ArrowLeft: 'Left', ArrowRight: 'Right', Enter: 'Return', Escape: 'Esc', '+': 'Plus' };
   function accelFromEvent(e) {

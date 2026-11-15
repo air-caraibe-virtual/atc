@@ -745,8 +745,8 @@ ipcMain.handle('update-install', async (_e, url, version) => {
 // ---------- Micro : reconnaissance vocale (Whisper hors ligne) ----------
 const sttDir = () => path.join(app.getPath('userData'), 'models');
 const sttProgress = (p) => send('stt-progress', p);
-ipcMain.handle('stt-prepare', async () => {
-  try { await require('./stt.js').load(sttDir(), sttProgress); send('stt-progress', { done: true }); return { ok: true }; }
+ipcMain.handle('stt-prepare', async (_e, model) => {
+  try { require('./stt.js').setModel(model); await require('./stt.js').load(sttDir(), sttProgress); send('stt-progress', { done: true }); return { ok: true }; }
   catch (e) { return { ok: false, error: String(e.message || e) }; }
 });
 ipcMain.handle('stt-transcribe', async (_e, samples, langs) => {

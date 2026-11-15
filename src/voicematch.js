@@ -105,9 +105,53 @@
     return top;
   }
 
+  // ---- Mots-clés par demande (toutes langues), pour comprendre même une phrase mal transcrite ----
+  // poids : 3 = très sûr, 2 = probable, 1 = indice
+  const INTENTS = {
+    req_clearance: [[3, 'clearance', 'clairance', 'cliranse', 'clearence', 'clarence', 'autorisation ifr', 'autorizacion ifr', 'ifr freigabe', 'autorizzazione ifr', 'autorizacao ifr'], [2, 'ifr', 'autorisation', 'autorizacion', 'freigabe', 'autorizzazione', 'autorizacao'], [1, 'information', 'informacion', 'informazione', 'informacao']],
+    req_push: [[3, 'pushback', 'push', 'repoussage', 'repousser', 'remolque', 'refoulement'], [1, 'startup', 'mise en route', 'puesta en marcha', 'anlassen', 'messa in moto', 'acionamento']],
+    req_start: [[2, 'startup', 'start', 'mise en route', 'demarrage', 'puesta en marcha', 'anlassen', 'messa in moto', 'acionamento']],
+    req_taxi: [[3, 'taxi', 'rouler', 'roulage', 'rodar', 'rodaje', 'rollen', 'rollbereit', 'rullaggio', 'rullare', 'taxiar']],
+    at_holding: [[3, 'holding point', 'holding short', 'point d arret', 'point d attente', 'punto de espera', 'rollhalt', 'punto attesa', 'punto di attesa', 'ponto de espera'], [1, 'holding']],
+    ready_dep: [[3, 'ready for departure', 'ready for take off', 'ready for takeoff', 'pret au depart', 'pret pour le depart', 'prets au depart', 'pret au decollage', 'listo para salir', 'listos para salir', 'listos para despegar', 'abflugbereit', 'startbereit', 'pronti per la partenza', 'pronti al decollo', 'prontos para decolagem', 'pronto para decolagem'], [1, 'ready', 'pret', 'listo', 'listos', 'pronti', 'prontos', 'departure', 'depart']],
+    req_descent: [[3, 'ready for descent', 'request descent', 'pret pour la descente', 'pret a descendre', 'demande descente', 'listos para el descenso', 'listo para descenso', 'bereit zum sinkflug', 'pronti per la discesa', 'prontos para descida'], [2, 'descent', 'descente', 'descenso', 'sinkflug', 'discesa', 'descida']],
+    req_level: [[3, 'flight level', 'request level', 'request climb', 'demande niveau', 'demande le niveau', 'solicitamos nivel', 'erbitten flugflache', 'richiediamo livello', 'solicitamos nivel'], [2, 'level', 'niveau', 'nivel', 'flugflache', 'livello', 'nivel']],
+    established: [[3, 'established', 'etabli', 'etablis', 'etablie', 'establecidos', 'establecido', 'stabilizzati', 'estabilizados', 'auf dem ils'], [2, 'localizer', 'localiser', 'ils']],
+    go_around: [[3, 'go around', 'going around', 'remise des gaz', 'remise de gaz', 'remettons les gaz', 'motor y al aire', 'durchstarten', 'starten durch', 'riattacchiamo', 'riattaccata', 'arremetendo', 'arremetida']],
+    vacated: [[3, 'runway vacated', 'vacated', 'piste degagee', 'piste liberee', 'degage', 'pista libre', 'piste verlassen', 'pista liberata', 'pista livre'], [1, 'libre', 'livre']],
+    on_stand: [[3, 'on stand', 'au parking', 'on blocks', 'al parcheggio', 'auf parkposition', 'en el puesto', 'na posicao'], [2, 'stand', 'parking', 'parcheggio', 'parkposition', 'estacionamiento', 'puesto']],
+    cross_req: [[3, 'cross runway', 'request crossing', 'traverser', 'traversee', 'cruzar', 'cruce', 'kreuzen', 'attraversare', 'attraversamento', 'cruzar a pista']],
+    req_notam: [[3, 'notam', 'runway status', 'etat des pistes', 'estado de pistas', 'estado de las pistas', 'pistenzustand', 'stato delle piste', 'condicao das pistas']],
+    checkin: [[2, 'passing', 'climbing', 'descending', 'en montee', 'en descente', 'passant', 'subiendo', 'descendiendo', 'pasando', 'steigen', 'sinken', 'in salita', 'in discesa', 'subindo', 'descendo'], [1, 'with you', 'avec vous']],
+    checkin_twr: [[2, 'established', 'etabli', 'final', 'finale', 'ils'], [1, 'with you', 'avec vous']],
+  };
+  const WORDS = {}; // mots-clés prénormalisés
+  for (const [id, groups] of Object.entries(INTENTS)) WORDS[id] = groups.map(([w, ...ks]) => [w, ks.map((k) => tokens(k).join(' '))]);
+  // score d'une demande dans une phrase : le mot-clé le plus fort trouvé (mot exact, ou à une lettre près pour les mots longs)
+  function intentScore(said, id) {
+    const toks = tokens(said), txt = ' ' + toks.join(' ') + ' ';
+    let best = 0;
+    for (const [w, ks] of WORDS[id] || []) {
+      for (const k of ks) {
+        if (w <= best) break;
+        if (txt.includes(' ' + k + ' ')) { best = w; break; }
+        if (!k.includes(' ') && k.length >= 6 && toks.some((t) => Math.abs(t.length - k.length) <= 1 && lev(t, k) <= 1)) { best = w; break; }
+      }
+    }
+    return best;
+  }
+  /* Demande la plus probable parmi celles proposées en ce moment, d'après les mots-clés.
+     Renvoie { id, score } seulement si elle se détache nettement des autres. */
+  function bestIntent(said, ids) {
+    const sc = ids.map((id) => ({ id, score: intentScore(said, id) })).filter((x) => x.score > 0).sort((a, b) => b.score - a.score);
+    if (!sc.length) return null;
+    if (sc.length > 1 && sc[1].score >= sc[0].score) return null; // ex aequo : on laisse la ressemblance trancher
+    return sc[0];
+  }
+
   // « radio check » dans toutes les langues (reconnu même si le reste de la phrase est mal transcrit)
   const RADIO_CHECK = /\b(radio ?check|radio ?chek|radiocheck|essai radio|test radio|prueba de radio|comprobacion de radio|funkprobe|funk ?check|prova radio|teste de radio)\b/;
   function isRadioCheck(said) { return RADIO_CHECK.test(norm(said)); }
 
-  return { norm, tokens, similarity, parseLevel, best, isRadioCheck };
+  return { norm, tokens, similarity, parseLevel, best, isRadioCheck, intentScore, bestIntent };
 });

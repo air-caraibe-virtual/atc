@@ -188,7 +188,9 @@
       <label class="check">Nombre d'avions IA (trafic réel) <select id="setTrafficMax" class="mini-sel" style="margin-left:8px"><option value="4">4</option><option value="8">8</option><option value="12">12</option><option value="16">16</option><option value="24">24</option><option value="32">32</option></select></label>
       <label class="check"><input type="checkbox" id="setFsltl"> <span>Utiliser les avions FSLTL en priorité pour le trafic réel</span></label>
       <label class="check"><input type="checkbox" id="setAutoRb"> <span>Collationner automatiquement les instructions</span></label>
-      <label class="check"><input type="checkbox" id="setMic"> <span>Parler au micro (reconnaissance vocale sur le PC, modèle de 80 Mo téléchargé une fois)</span></label>
+      <label class="check"><input type="checkbox" id="setMic"> <span>Parler au micro (reconnaissance vocale sur le PC, modèle téléchargé une seule fois)</span></label>
+      <label><span>Reconnaissance vocale</span>
+        <select id="setMicModel"><option value="small">Précise (recommandée, 250 Mo)</option><option value="base">Rapide (PC modeste, 80 Mo, moins précise)</option></select></label>
       <div class="ptt-row"><span>Touche du micro / alternat (clavier ou bouton de joystick, marche aussi dans MSFS)</span>
         <div class="ptt-ctl"><span id="pttLabel" class="ptt-key">—</span><button id="btnPttDetect" class="mini">Détecter</button><button id="btnPttClear" class="mini ghost">Aucune</button></div>
         <small id="pttHint" class="ptt-hint"></small></div>

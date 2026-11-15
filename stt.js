@@ -1,14 +1,22 @@
 /* ATC — reconnaissance vocale hors ligne (Whisper, dans le processus principal).
-   Le modèle est téléchargé une seule fois (≈ 80 Mo) puis gardé sur le PC. */
+   Le modèle est téléchargé une seule fois puis gardé sur le PC :
+   « précis » (whisper-small, ≈ 250 Mo) ou « rapide » (whisper-base, ≈ 80 Mo). */
 'use strict';
 
-const MODEL = 'Xenova/whisper-base';
+const MODELS = { small: 'Xenova/whisper-small', base: 'Xenova/whisper-base' };
+let MODEL = MODELS.small;
 const LANGS = ['en', 'fr', 'es', 'de', 'it', 'pt'];
-let T = null, pipe = null, loading = null;
+let T = null, pipe = null, loading = null, loadedFor = null;
+
+function setModel(name) {
+  const m = MODELS[name] || MODELS.small;
+  if (m !== MODEL) { MODEL = m; pipe = null; loading = null; }
+}
 
 function load(cacheDir, onProgress) {
-  if (pipe) return Promise.resolve(pipe);
+  if (pipe && loadedFor === MODEL) return Promise.resolve(pipe);
   if (loading) return loading;
+  const want = MODEL;
   loading = (async () => {
     T = T || require('@huggingface/transformers');
     T.env.cacheDir = cacheDir;
@@ -24,7 +32,7 @@ function load(cacheDir, onProgress) {
         if (onProgress && t > 2e6) onProgress({ loaded: l, total: t });
       },
     });
-    pipe = p;
+    pipe = p; loadedFor = want;
     return p;
   })().catch((e) => { loading = null; throw e; });
   return loading;
@@ -60,10 +68,11 @@ async function transcribe(cacheDir, samples, fallbackLangs, onProgress) {
   const langs = det ? [det.lang] : [...new Set((fallbackLangs || ['en']).filter((l) => LANGS.includes(l)))].slice(0, 3);
   const results = [];
   for (const lang of langs) {
-    const r = await p(audio, { language: lang, task: 'transcribe' });
+    // pas de répétitions en boucle (« zulu zulu zulu… »), une erreur fréquente de Whisper sur l'audio radio
+    const r = await p(audio, { language: lang, task: 'transcribe', no_repeat_ngram_size: 4 });
     results.push({ lang, text: String((r && r.text) || '').trim() });
   }
   return { results, detected: det && det.lang };
 }
 
-module.exports = { load, transcribe, MODEL };
+module.exports = { load, transcribe, setModel, MODELS };

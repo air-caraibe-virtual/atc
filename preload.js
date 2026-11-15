@@ -26,7 +26,7 @@ contextBridge.exposeInMainWorld('sim', {
   onPushStatus: (cb) => ipcRenderer.on('push-status', (_e, d) => cb(d)),
   setSquawk: (code) => ipcRenderer.invoke('set-squawk', code),
   tts: (text, voice, rate, pitch) => ipcRenderer.invoke('tts', text, voice, rate, pitch),
-  sttPrepare: () => ipcRenderer.invoke('stt-prepare'),
+  sttPrepare: (model) => ipcRenderer.invoke('stt-prepare', model),
   sttTranscribe: (samples, langs) => ipcRenderer.invoke('stt-transcribe', samples, langs),
   onSttProgress: (cb) => ipcRenderer.on('stt-progress', (_e, d) => cb(d)),
   micShortcut: (accel) => ipcRenderer.invoke('mic-shortcut', accel),
