@@ -15,6 +15,15 @@
     const lo2 = lo1 + Math.atan2(Math.sin(b) * Math.sin(d) * Math.cos(la1), Math.cos(d) - Math.sin(la1) * Math.sin(la2));
     return { lat: (la2 * 180) / Math.PI, lon: (lo2 * 180) / Math.PI };
   }
+  // Position et cap d'un avion garé : parkings MSFS = centre et cap exacts ;
+  // parkings OSM = point d'arrêt du nez, donc on recule l'avion d'une demi-longueur, nez vers le terminal
+  function standPose(L, g) {
+    if (g.msfs && g.hdg != null) return { pos: { lat: g.lat, lon: g.lon }, hdg: g.hdg };
+    let node = null, bd = Infinity;
+    for (const [, p] of L.coords) { const d = M(p, g); if (d > 25 && d < bd) { bd = d; node = p; } }
+    const hdg = node ? bearing(node, g) : 0;
+    return { pos: move(g, (hdg + 180) % 360, 18), hdg };
+  }
   // feux d'un avion IA selon ce qu'il fait
   const lightMode = (a) => (a.static || a.state === 'parked' || a.state === 'parked_in' || a.state === 'taxi_wait' ? 'park'
     : a.light ? 'rwy' : a.onGround ? 'taxi' : 'cruise');
@@ -340,10 +349,8 @@
       const g = free.reduce((b, x) => (M(x, real) < M(b, real) ? x : b), free[0]);
       if (M(g, real) > 700) { this.used.add(real.cs); return false; }
       const a = this.newAircraft('park', ctx, real);
-      // cap : depuis le taxiway le plus proche vers le parking
-      let node = null, bd = Infinity;
-      for (const [, p] of L.coords) { const d = M(p, g); if (d > 25 && d < bd) { bd = d; node = p; } }
-      a.pos = { lat: g.lat, lon: g.lon }; a.hdg = node ? bearing(node, g) : 0; a.alt = ctx.elev; a.onGround = true;
+      const sp = standPose(L, g);
+      a.pos = sp.pos; a.hdg = sp.hdg; a.alt = ctx.elev; a.onGround = true;
       a.state = 'static'; a.static = true; a.gate = g.ref; a.gateObj = g;
       return this.create(a, 0);
     }
@@ -516,6 +523,7 @@
               a.path = [{ ...a.pos }, ...(ex ? [ex] : []), ...(r ? r.pts : [])];
             }
             if (g) a.path.push({ lat: g.lat, lon: g.lon });
+            a.gateTarget = g;
             a.gate = g && g.ref; a.state = 'vacate'; a.light = false;
             this.radio(a, 'TWR', 'vacate');
           }
@@ -525,7 +533,11 @@
         case 'taxi_in': {
           const doneP = this.followPath(a, dt, a.state === 'vacate' ? 14 : 16);
           if (a.state === 'vacate' && Airport.alongRunway(a.pos, ctx.th, ctx.end).xt > 70) a.state = 'taxi_in';
-          if (doneP) { a.state = 'parked_in'; a.until = t + 45000; a.v = 0; }
+          if (doneP) {
+            a.state = 'parked_in'; a.until = t + 45000; a.v = 0;
+            const g = a.gateTarget;
+            if (g) { const sp = standPose(ctx.L, g); a.pos = sp.pos; a.hdg = sp.hdg; a.gateObj = g; }
+          }
           break;
         }
         case 'parked_in':

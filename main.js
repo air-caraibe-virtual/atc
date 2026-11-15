@@ -12,7 +12,7 @@ let handle = null;
 let connected = false;
 let retryTimer = null;
 
-const DEF_TEL = 0, REQ_TEL = 0, DEF_FAC = 1, DEF_FENIX = 2, REQ_FENIX = 2, DEF_FENIX_XFER = 3;
+const DEF_TEL = 0, REQ_TEL = 0, DEF_FAC = 1, DEF_FENIX = 2, REQ_FENIX = 2, DEF_FENIX_XFER = 3, DEF_PARK = 4;
 // ---- Trafic IA créé et piloté par ATC ----
 const DEF_AIPOS = 10, DEF_AIGND = 11, DEF_AIGEAR = 12, DEF_AIGEARPOS = 13, DEF_AILIGHT = 14, EV_LSET_BASE = 70, EV_GEAR_SET = 61, REQ_MODELS = 40, REQ_AI_BASE = 1000, REQ_AIGND_BASE = 5000;
 const EV_FRZ_LL = 50, EV_FRZ_ALT = 51, EV_FRZ_ATT = 52, EV_GEAR_UP = 53, EV_GEAR_DN = 54, EV_LAND_ON = 55, EV_LAND_OFF = 56, EV_BCN_ON = 57, EV_STROBE_ON = 58, EV_STROBE_OFF = 59, EV_ENG_AUTO = 60;
@@ -80,6 +80,10 @@ async function connectSim() {
       'OPEN FREQUENCY', 'TYPE', 'FREQUENCY', 'NAME', 'CLOSE FREQUENCY', 'CLOSE AIRPORT']) {
       handle.addToFacilityDefinition(DEF_FAC, f);
     }
+    // Parkings de MSFS (position, cap et taille exacts, comme dans le décor)
+    try {
+      for (const f of ['OPEN AIRPORT', 'LATITUDE', 'LONGITUDE', 'ALTITUDE', 'OPEN TAXI_PARKING', 'TYPE', 'NAME', 'NUMBER', 'HEADING', 'RADIUS', 'BIAS_X', 'BIAS_Z', 'CLOSE TAXI_PARKING', 'CLOSE AIRPORT']) handle.addToFacilityDefinition(DEF_PARK, f);
+    } catch (e) { console.warn('Parkings MSFS indisponibles', e); }
 
     // Savoir si l'on est vraiment en vol (et pas dans les menus de MSFS)
     handle.subscribeToSystemEvent(EV_SIMSTART, 'SimStart');
@@ -136,6 +140,9 @@ async function connectSim() {
           const heading = d.readFloat32(), length = d.readFloat32();
           const pn = d.readInt32(), pd = d.readInt32(), sn = d.readInt32(), sd = d.readInt32();
           p.runways.push({ heading, length, pn, pd, sn, sd });
+        } else if (r.type === FacilityDataType.TAXI_PARKING) {
+          const type = d.readInt32(), name = d.readInt32(), number = d.readUint32(), heading = d.readFloat32(), radius = d.readFloat32(), bx = d.readFloat32(), bz = d.readFloat32();
+          (p.parking = p.parking || []).push({ type, name, number, heading, radius, bx, bz });
         } else if (r.type === FacilityDataType.FREQUENCY) {
           const type = d.readInt32(), freq = d.readInt32(), name = d.readString64();
           p.freqs.push({ type, freq, name });
@@ -265,6 +272,26 @@ ipcMain.handle('metar', async (_e, icaos) => {
   catch (e) { return []; }
 });
 ipcMain.handle('airport', (_e, icao) => airportFromSim(icao));
+// Parkings pour avions de ligne (portes et aires cargo) de l'aéroport dans MSFS
+ipcMain.handle('airport-parking', (_e, icao) => new Promise((resolve) => {
+  if (!handle || !connected || !/^[A-Z0-9]{3,4}$/i.test(icao || '')) return resolve(null);
+  const id = facReq++;
+  const p = { airport: null, runways: [], freqs: [], parking: [], resolve: null, timer: null };
+  p.resolve = (res) => {
+    if (!res || !res.airport) return resolve(null);
+    const { lat, lon } = res.airport, k = 111120 * Math.cos(lat * Math.PI / 180);
+    const LET = (n) => (n >= 12 && n <= 37 ? String.fromCharCode(53 + n) : n === 10 ? 'G' : '');
+    const big = new Set([4, 5, 8, 9, 10, 15]); // grand parking GA, cargo, portes S/M/L, porte extra
+    const list = res.parking.filter((x) => big.has(x.type) && x.radius >= 12).map((x) => ({
+      ref: LET(x.name) + (x.number || ''), lat: lat + x.bz / 111120, lon: lon + x.bx / k, hdg: ((x.heading % 360) + 360) % 360, radius: x.radius, msfs: true, gate: x.type >= 8,
+    }));
+    resolve(list);
+  };
+  p.timer = setTimeout(() => { facPending.delete(id); resolve(null); }, 8000);
+  facPending.set(id, p);
+  try { handle.requestFacilityData(DEF_PARK, id, icao.toUpperCase()); }
+  catch (e) { clearTimeout(p.timer); facPending.delete(id); resolve(null); }
+}));
 
 // ---- Trafic IA : liste des modèles, création, déplacement, suppression ----
 ipcMain.handle('ai-models', () => new Promise((resolve) => {

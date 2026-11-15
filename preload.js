@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld('sim', {
   aiClear: () => ipcRenderer.invoke('ai-clear'),
   onAiStatus: (cb) => ipcRenderer.on('ai-status', (_e, d) => cb(d)),
   notams: (icao) => ipcRenderer.invoke('notams', icao),
+  airportParking: (icao) => ipcRenderer.invoke('airport-parking', icao),
   nearestAirport: (lat, lon) => ipcRenderer.invoke('nearest-airport', lat, lon),
   airportLayout: (icao, lat, lon) => ipcRenderer.invoke('airport-layout', icao, lat, lon),
   setCom1: (mhz, method) => ipcRenderer.invoke('set-com1', mhz, method),

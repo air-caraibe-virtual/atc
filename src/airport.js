@@ -42,6 +42,9 @@
         else if (t.aeroway === 'parking_position' || t.aeroway === 'gate') out.gates.push({ ref: t.ref || t.name || '', lat: e.lat, lon: e.lon, gate: t.aeroway === 'gate' });
       }
     }
+    // les nœuds « gate » d'OSM sont souvent la porte d'embarquement (dans le terminal) :
+    // on garde les vrais emplacements avion (parking_position) quand il y en a
+    if (out.gates.some((g) => !g.gate)) out.gates = out.gates.filter((g) => !g.gate);
     return out;
   }
 

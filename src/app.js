@@ -815,6 +815,22 @@
     addMessage({ from: 'system', text: `Pistes en service à ${a.city} en ce moment (${src}) : ${same ? (dep.join(', ') || arr.join(', ')) : `départs ${dep.join(', ') || '—'}, arrivées ${arr.join(', ') || '—'}`}${a.rwy !== before ? ` — votre piste : ${a.rwy}` : ''}.` });
     render();
   }
+  // ---- Parkings exacts de MSFS (au lieu des points OSM, parfois dans le terminal) ----
+  async function useSimParking(icao) {
+    const L = layouts[icao];
+    if (!L || L.simParking || !api || !api.airportParking || simStatus !== 'connected' || demo) return;
+    if (Date.now() - (L.simParkingTry || 0) < 20000) return;
+    L.simParkingTry = Date.now();
+    try {
+      const list = await api.airportParking(icao);
+      if (list && list.length >= 3 && layouts[icao] === L) { L.gates = list; L.simParking = true; }
+    } catch (_) {}
+  }
+  setInterval(() => {
+    const f = engine.flight, list = f ? [f.dep.icao, f.arr.icao] : [];
+    if (traffic.home) list.push(traffic.home.icao);
+    list.forEach((icao) => useSimParking(icao));
+  }, 5000);
   // ---- Trafic réel sans plan de vol : autour de l'aéroport où se trouve le joueur ----
   let homeBusy = false, homeAt = 0;
   async function updateHome() {
@@ -830,6 +846,7 @@
       const n = list && list.find((x) => utils.distNm(t, x) < 8);
       if (!n || engine.flight) return;
       if (!layouts[n.icao]) { const json = await api.airportLayout(n.icao, n.lat, n.lon); if (json) layouts[n.icao] = Airport.parse(json); }
+      await useSimParking(n.icao);
       const L = layouts[n.icao]; if (!L || !L.runways || !L.runways.length || !window.MapView) return;
       const elev = t.onGround && t.alt != null ? Math.round(t.alt - Math.max(0, t.agl || 0)) : 0;
       const home = { icao: n.icao, city: n.city || n.name || n.icao, name: n.name, lat: n.lat, lon: n.lon, elev };
