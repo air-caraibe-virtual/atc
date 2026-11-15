@@ -94,8 +94,11 @@
       if (!this.enabled) return;
       this.now = now; this.engine = engine; this.tel = tel; this.audible = audible;
       const ctx = this.context(engine, layouts, tel);
-      const key = ctx ? ctx.a.icao + ctx.a.rwy + (ctx.a.rwyTakeoff || '') + (ctx.a.rwyLand || '') : null;
-      if (key !== this.side) { this.clear(); this.side = key; this.nextSpawn = now + 8000; }
+      // hors des aéroports, en vol : trafic en route (vrais vols autour du joueur)
+      const enroute = !ctx && tel && tel.lat != null && tel.onGround === false && engine.flight;
+      const key = ctx ? ctx.a.icao + ctx.a.rwy + (ctx.a.rwyTakeoff || '') + (ctx.a.rwyLand || '') : enroute ? 'ENROUTE' : null;
+      if (key !== this.side) { this.clear(); this.side = key; this.nextSpawn = now + 8000; this.liveAt = 0; this.live = null; }
+      if (enroute) { this.ctx = null; return this.enrouteTick(now, dt, tel); }
       if (!ctx) return;
       this.ctx = ctx;
       // liste des avions installés dans MSFS (redemandée tant qu'elle est vide)
@@ -147,6 +150,100 @@
     }
 
     // Avions FSLTL en priorité (faits pour le trafic IA, nombreuses livrées), sinon les avions de ligne installés
+    // ---------- Trafic en route ----------
+    enrouteTick(now, dt, tel) {
+      this.ensureModels(now, tel);
+      // vrais vols autour du joueur, rafraîchis toutes les 60 s (la zone suit l'avion)
+      if (this.io.live && now - (this.liveAt || 0) > 60000) {
+        this.liveAt = now;
+        Promise.resolve(this.io.live(tel.lat, tel.lon)).then((l) => { if (!Array.isArray(l)) return; this.live = l; this.liveTime = Date.now(); this.recalEnroute(); if (this.onLive) this.onLive(true, l); })
+          .catch(() => { if (this.onLive) this.onLive(false, null); });
+      }
+      const usable = this.models && (this.models.length || !(this.io.connected && this.io.connected()));
+      if (usable && this.live && now >= this.nextSpawn) {
+        this.nextSpawn = now + 4000;
+        const cands = this.live.filter((f) => !f.onGround && f.cs && /^[A-Z]{3}\d/.test(f.cs) && !this.used.has(f.cs) && f.alt != null && f.alt > 3000 && f.track != null)
+          .map((f) => ({ ...f, d: distNm(f, tel) }))
+          .filter((f) => f.d < 40 && (tel.alt == null || Math.abs(f.alt - tel.alt) < 15000))
+          .sort((x, y) => x.d - y.d);
+        for (let i = 0; i < 2 && cands.length && this.list().length < this.max; i++) this.spawnEnroute(cands.shift());
+      }
+      for (const a of this.ai) this.stepEnroute(a, dt, tel);
+      const gone = this.ai.filter((a) => a.state === 'gone');
+      gone.forEach((a) => { this.io.remove(a.id); this.used.delete(a.cs); });
+      this.ai = this.ai.filter((a) => a.state !== 'gone');
+      this.io.move(this.ai.filter((a) => a.ready).map((a) => ({
+        id: a.id, lat: a.pos.lat, lon: a.pos.lon, alt: a.alt, hdg: a.hdg, pitch: a.pitch, bank: a.bank, v: a.v, vs: a.vs, onGround: false, gear: false, light: a.alt < 10000,
+      })));
+    }
+    ensureModels(now, tel) {
+      if ((!this.models || (!this.models.length && this.io.connected && this.io.connected())) && now - (this.modelsAt || -1e9) > 30000) {
+        this.modelsAt = now;
+        Promise.resolve(this.io.models()).then((m) => { this.models = this.pickModels(m || []); if (this.onModels) this.onModels(this.models.length, (m || []).length); }).catch(() => { this.models = []; });
+      }
+      if (this.models && !this.models.length && this.io.connected && this.io.connected() && tel && tel.title && now - (this.modelsAt || 0) > 20000) this.models = [{ title: tel.title, livery: '' }];
+    }
+    spawnEnroute(f) {
+      const a = this.newAircraft('enr', { a: { icao: 'L' } }, f);
+      a.pos = { lat: f.lat, lon: f.lon }; a.alt = f.alt; a.hdg = f.track; a.v = f.kts || 420; a.vs = f.vs || 0;
+      a.pitch = a.vs > 300 ? -3 : a.vs < -300 ? 1 : -1; a.bank = 0; a.onGround = false; a.gear = false; a.light = a.alt < 10000;
+      a.real = { lat: f.lat, lon: f.lon, alt: f.alt, track: f.track, kts: a.v, vs: a.vs, t: this.now }; a.seen = this.now;
+      a.state = 'enroute';
+      return this.create(a, a.v);
+    }
+    // nouvelles données réelles : on recale la cible de chaque avion
+    recalEnroute() {
+      for (const a of this.ai) {
+        if (a.kind !== 'enr') continue;
+        const f = this.live.find((x) => x.cs === a.cs);
+        if (!f) continue;
+        if (f.onGround) { a.state = 'gone'; continue; }
+        a.real = { lat: f.lat, lon: f.lon, alt: f.alt != null ? f.alt : a.alt, track: f.track != null ? f.track : a.hdg, kts: f.kts || a.v, vs: f.vs || 0, t: this.now };
+        a.seen = this.now;
+      }
+    }
+    stepEnroute(a, dt, tel) {
+      if (a.kind !== 'enr') return;
+      const r = a.real, since = (this.now - r.t) / 1000;
+      // position réelle extrapolée, vers laquelle on converge doucement (≈ 15 s) pour éviter tout saut
+      const target = move({ lat: r.lat, lon: r.lon }, r.track, r.kts * KT * since);
+      const tAlt = r.alt + (r.vs / 60) * since;
+      const prevHdg = a.hdg;
+      a.hdg = turnTo(a.hdg, r.track, 2 * dt);
+      a.v += (r.kts - a.v) * Math.min(1, dt * 0.2);
+      a.pos = move(a.pos, a.hdg, a.v * KT * dt);
+      const k = Math.min(1, dt / 15);
+      a.pos = { lat: a.pos.lat + (target.lat - a.pos.lat) * k, lon: a.pos.lon + (target.lon - a.pos.lon) * k };
+      const prevAlt = a.alt;
+      a.alt += (r.vs / 60) * dt; a.alt += (tAlt - a.alt) * k;
+      a.vs = dt > 0 ? ((a.alt - prevAlt) / dt) * 60 : 0;
+      a.pitch = a.vs > 300 ? -3 : a.vs < -300 ? 1 : -1;
+      const turn = dt > 0 ? ((((a.hdg - prevHdg + 540) % 360) - 180) / dt) : 0;
+      a.bank = Math.max(-25, Math.min(25, -turn * 8));
+      // trop loin, ou plus de nouvelles du vol réel depuis 4 minutes
+      if (distNm(a.pos, tel) > 50 || this.now - a.seen > 240000) a.state = 'gone';
+    }
+    // Info trafic : avion proche (moins de 8 NM, moins de 2 500 ft d'écart) qui se rapproche, pas encore annoncé
+    trafficInfo(tel) {
+      if (!this.enabled || !tel || tel.lat == null) return null;
+      this.announced = this.announced || new Set();
+      let best = null;
+      for (const a of this.ai) {
+        if (a.kind !== 'enr' || this.announced.has(a.cs) || !a.pos) continue;
+        const d = distNm(tel, a.pos), dz = a.alt - (tel.alt || 0);
+        if (d > 8 || Math.abs(dz) > 2500) continue;
+        a.lastD = a.lastD == null ? d : a.lastD;
+        const closing = d <= a.lastD; a.lastD = d;
+        if (!closing && d > 3) continue;
+        if (!best || d < best.d) best = { a, d, dz };
+      }
+      if (!best) return null;
+      this.announced.add(best.a.cs);
+      const hdg = tel.hdgTrue != null ? tel.hdgTrue : tel.hdg || 0;
+      const rel = ((bearing(tel, best.a.pos) - hdg) + 720) % 360;
+      return { cs: best.a.cs, type: best.a.type, clock: Math.round(rel / 30) % 12 || 12, nm: Math.max(1, Math.round(best.d)), dz: Math.round(best.dz / 100) * 100, same: Math.abs(best.a.hdg - hdg) < 45 };
+    }
+
     pickModels(list) {
       const fsltl = list.filter((m) => /fsltl/i.test(m.title + ' ' + m.livery) && (FSLTL_TYPE.test(m.title + ' ' + m.livery) || AIRLINER.test(m.title)) && !NOT_AIRLINER.test(m.title + ' ' + m.livery));
       this.fsltlCount = fsltl.length;

@@ -432,6 +432,21 @@
         }
       }
 
+      // --- Infos trafic en route (Départ, Contrôle, Approche) ---
+      if (airborne && this.traffic && this.traffic.trafficInfo && ['CLIMB', 'CRUISE', 'DESCENT', 'APPROACH'].includes(ph) && this.now - (this.lastTfc || 0) > 45000) {
+        const ti = this.traffic.trafficInfo(t);
+        if (ti) {
+          this.lastTfc = this.now;
+          const lvl = ti.dz === 0 ? this.T('même niveau', 'same level') : this.T(`${Math.abs(ti.dz)} pieds ${ti.dz > 0 ? 'au-dessus' : 'au-dessous'}`, `${Math.abs(ti.dz)} feet ${ti.dz > 0 ? 'above' : 'below'}`);
+          const clk = { text: this.T(`${ti.clock} heures`, `${ti.clock} o'clock`), speech: this.T(`${ti.clock === 1 ? 'une heure' : ti.clock + ' heures'}`, `${ti.clock} o'clock`) };
+          const nm = this.T(`${ti.nm} nautique${ti.nm > 1 ? 's' : ''}`, `${ti.nm} mile${ti.nm > 1 ? 's' : ''}`);
+          const type = ti.type ? { text: ti.type, speech: ti.type.replace(/^A(\d)/, 'A $1') } : null;
+          const m = this.M(cs, ',', this.T('trafic à', 'traffic'), clk, ',', nm, ',', lvl, type ? [',', this.T('un', 'a'), type] : null);
+          const rb = this.M(this.T('Recherchons le trafic', 'Looking out'), ',', cs);
+          return this._instruct(m, rb, null);
+        }
+      }
+
       // --- Déclencheurs automatiques ---
       switch (ph) {
         case 'TAKEOFF':
