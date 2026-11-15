@@ -93,7 +93,7 @@ input:focus, select:focus { outline: 2px solid #2b6a52; border-color: var(--acce
 .waiting { color: var(--muted); align-self: center; font-size: 13px; }
 .waiting::after { content: ' ●●●'; animation: blink 1.2s infinite; }
 
-.overlay { position: fixed; inset: 0; background: rgba(3, 7, 15, .72); display: flex; align-items: center; justify-content: center; z-index: 10; }
+.overlay { position: fixed; inset: 0; background: rgba(3, 7, 15, .72); display: flex; align-items: center; justify-content: center; z-index: 5000; }
 .dialog { width: min(560px, 92vw); background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 18px; max-height: 90vh; overflow-y: auto; }
 .dlg-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
 .dlg-head h3 { margin: 0; }
@@ -175,3 +175,5 @@ input[type=checkbox] { accent-color: var(--accent); }
 .progress { height: 8px; background: var(--bg); border: 1px solid var(--line); border-radius: 99px; margin-top: 12px; overflow: hidden; }
 .progress div { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
 .version-row { justify-content: space-between; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+
+.mapview { isolation: isolate; z-index: 0; }
