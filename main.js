@@ -283,7 +283,7 @@ ipcMain.handle('airport-parking', (_e, icao) => new Promise((resolve) => {
     const LET = (n) => (n >= 12 && n <= 37 ? String.fromCharCode(53 + n) : n === 10 ? 'G' : '');
     const big = new Set([4, 5, 8, 9, 10, 15]); // grand parking GA, cargo, portes S/M/L, porte extra
     const list = res.parking.filter((x) => big.has(x.type) && x.radius >= 12).map((x) => ({
-      ref: LET(x.name) + (x.number || ''), lat: lat + x.bz / 111120, lon: lon + x.bx / k, hdg: ((x.heading % 360) + 360) % 360, radius: x.radius, msfs: true, gate: x.type >= 8,
+      ref: LET(x.name) + (x.number || ''), lat: lat + x.bz / 111120, lon: lon + x.bx / k, hdg: (((x.heading + 180) % 360) + 360) % 360, // le cap MSFS du parking pointe vers l'arrière de l'avion garé (constaté en jeu) radius: x.radius, msfs: true, gate: x.type >= 8,
     }));
     resolve(list);
   };
