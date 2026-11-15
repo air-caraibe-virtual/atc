@@ -35,6 +35,11 @@ jobs:
         run: npx electron-builder --win dir --x64 --publish never
       - name: Icône et version dans ATC.exe
         run: node build/rcedit.js
+      - name: Installer NSIS
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "C:\Program Files (x86)\NSIS\makensis.exe")) { choco install nsis -y --no-progress }
+          Test-Path "C:\Program Files (x86)\NSIS\makensis.exe"
       - name: Fabriquer l'installateur
         shell: bash
         run: |
