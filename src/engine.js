@@ -796,10 +796,26 @@
       const rb = this.M(this.T('Descendons', 'Descend'), alt, q, ',', this.cs());
       this._instruct(msg, rb, () => { this._setCleared(target); this.clearDir = 'down'; this.phase = 'DESCENT'; });
     }
+    // vitesse : « 220 nœuds » / « two two zero knots »
+    spd(kt) {
+      const l = this.lang;
+      const w = { fr: 'nœuds', en: 'knots', es: 'nudos', de: 'Knoten', it: 'nodi', pt: 'nós' }[l] || 'knots';
+      return { text: `${kt} kt`, speech: l === 'en' ? `${digits(String(kt), 'en')} ${w}` : `${kt} ${w}` };
+    }
+    // consigne de vitesse en finale : « réduisez 160 nœuds jusqu'à 4 nautiques »
+    finalSpeed() {
+      const kt = 160, nm = 4;
+      const until = this.T(`jusqu'à ${nm} nautiques de la piste`, `until ${nm} miles final`, { es: `hasta ${nm} millas en final`, de: `bis ${nm} Meilen Endanflug`, it: `fino a ${nm} miglia in finale`, pt: `até ${nm} milhas na final` });
+      return {
+        atc: [this.T('réduisez', 'reduce speed', { es: 'reduzca velocidad', de: 'reduzieren Sie auf', it: 'riducete velocità', pt: 'reduza velocidade' }), this.spd(kt), until],
+        rb: [this.T('réduisons', 'reducing', { es: 'reducimos', de: 'reduzieren auf', it: 'riduciamo', pt: 'reduzindo' }), this.spd(kt), until],
+      };
+    }
     _approachClearance(afterGoAround) {
       const ils = this.T('approche ILS piste', 'ILS approach runway');
-      const msg = this.M(this.cs(), ',', afterGoAround ? this.T('identifié radar,', 'radar contact,') : null, this.T('autorisé', 'cleared'), ils, this.rwy('arr'), ',', this.T('rappelez établi', 'report established'));
-      const rb = this.M(this.T('Autorisé ILS piste', 'Cleared ILS runway'), this.rwy('arr'), ',', this.T('rappellerons établi', 'wilco'), ',', this.cs());
+      const fs = this.finalSpeed();
+      const msg = this.M(this.cs(), ',', afterGoAround ? this.T('identifié radar,', 'radar contact,') : null, this.T('autorisé', 'cleared'), ils, this.rwy('arr'), ',', fs.atc, ',', this.T('rappelez établi', 'report established'));
+      const rb = this.M(this.T('Autorisé ILS piste', 'Cleared ILS runway'), this.rwy('arr'), ',', fs.rb, ',', this.T('rappellerons établi', 'wilco'), ',', this.cs());
       this._instruct(msg, rb, () => { this.phase = 'FINAL'; this.flags.appClr = true; this.clearDir = 'down'; this.cleared = this.flight.appAlt; });
     }
     _landingClearance(unprompted) {
@@ -1020,8 +1036,11 @@
             if (this.flags.goAround) { this.flags.goAround = false; this._approachClearance(true); break; }
             const alt = this.alt(f.appAlt, f.arr.tl);
             const chgA = f.arr.rwyChange && f.arr.rwyChange.to ? [this.closureMsg({ rwys: [f.arr.rwyChange.from], until: f.arr.rwyChange.until, works: f.arr.rwyChange.works }), ','] : null;
-            const m = this.M(cs, ',', this.T('identifié radar, descendez', 'radar contact, descend'), alt, ',', this.qnh('arr'), ',', chgA, this.T('prévoyez approche ILS piste', 'expect ILS approach runway'), this.rwy('arr'));
-            const rb = this.M(this.T('Descendons', 'Descend'), alt, ',', this.qnh('arr'), ',', this.T('ILS piste', 'ILS runway'), this.rwy('arr'), ',', cs);
+            // vitesse d'approche intermédiaire
+            const sp = [this.T('réduisez', 'reduce speed', { es: 'reduzca velocidad', de: 'reduzieren Sie auf', it: 'riducete velocità', pt: 'reduza velocidade' }), this.spd(220)];
+            const spR = [this.T('réduisons', 'reducing', { es: 'reducimos', de: 'reduzieren auf', it: 'riduciamo', pt: 'reduzindo' }), this.spd(220)];
+            const m = this.M(cs, ',', this.T('identifié radar, descendez', 'radar contact, descend'), alt, ',', this.qnh('arr'), ',', sp, ',', chgA, this.T('prévoyez approche ILS piste', 'expect ILS approach runway'), this.rwy('arr'));
+            const rb = this.M(this.T('Descendons', 'Descend'), alt, ',', this.qnh('arr'), ',', spR, ',', this.T('ILS piste', 'ILS runway'), this.rwy('arr'), ',', cs);
             this._instruct(m, rb, () => { this._setCleared(f.appAlt); this.clearDir = 'down'; this.phase = 'APPROACH'; });
           }
           break;
