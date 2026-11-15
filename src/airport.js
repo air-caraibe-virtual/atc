@@ -177,6 +177,30 @@
     });
     return id == null ? null : layout.coords.get(id);
   }
+  // Vraie sortie de piste : un taxiway qui touche l'axe de piste devant l'avion et s'en écarte.
+  // Renvoie le point de l'axe à son niveau, puis le chemin par les taxiways jusqu'au parking.
+  function runwayExit(layout, pos, th, end, to, minAheadM) {
+    if (!layout || !layout.graph.size) return null;
+    const len = M(th, end) || 1, here = alongRunway(pos, th, end).t;
+    let best = null;
+    for (const [id, edges] of layout.graph) {
+      const c = layout.coords.get(id); if (!c) continue;
+      const ar = alongRunway(c, th, end);
+      if (ar.xt > 35 || ar.t > 1.02) continue;
+      const ahead = (ar.t - here) * len;
+      if (ahead < (minAheadM || 40)) continue;
+      // le taxiway doit quitter la piste (un voisin à plus de 50 m de l'axe, en s'éloignant)
+      const off = edges.some((e) => { const n = layout.coords.get(e.to); return n && crossTrack(n, th, end) > ar.xt + 15; });
+      if (!off) continue;
+      if (!best || ahead < best.ahead) best = { id, c, ahead, t: ar.t };
+    }
+    if (!best) return null;
+    const goal = to ? nearestNode(layout, to, 300) : null;
+    const r = goal != null ? shortest(layout, best.id, [goal]) : null;
+    // point de l'axe au niveau de la sortie
+    const abeam = { lat: th.lat + (end.lat - th.lat) * best.t, lon: th.lon + (end.lon - th.lon) * best.t };
+    return { abeam, node: best.c, ahead: best.ahead, pts: r ? r.path.map((id) => layout.coords.get(id)) : [best.c] };
+  }
   // Distance (m) d'un point à l'axe de piste
   function crossTrack(p, a, b) {
     const k = Math.cos(a.lat * Math.PI / 180);
@@ -192,5 +216,5 @@
     return { t: ((p.lon - a.lon) * k * dx + (p.lat - a.lat) * dy) / L2, xt: crossTrack(p, a, b) };
   }
 
-  return { parse, taxiToRunway, threshold, taxiBetween, exitPoint, alongRunway, crossTrack, runwayAt, crossingsOf };
+  return { parse, taxiToRunway, threshold, taxiBetween, exitPoint, runwayExit, alongRunway, crossTrack, runwayAt, crossingsOf };
 });

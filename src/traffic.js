@@ -504,11 +504,17 @@
           a.pos = move(a.pos, a.hdg, a.v * KT * dt);
           const al = Airport.alongRunway(a.pos, ctx.th, ctx.end);
           if (a.v <= 25 || al.t > 0.92) {
-            const ex = Airport.exitPoint(ctx.L, move(a.pos, a.hdg, 150), ctx.th, ctx.end);
             const gates = ctx.L.gates.filter((g) => this.ai.every((o) => o === a || !o.gate || o.gate !== g.ref));
             const g = gates.length ? gates[Math.floor(this.rand() * gates.length)] : null;
-            const r = ex && g ? Airport.taxiBetween(ctx.L, ex, g) : null;
-            a.path = [{ ...a.pos }, ...(ex ? [ex] : []), ...(r ? r.pts : [])];
+            // on dégage par une vraie sortie (taxiway relié à la piste) en suivant l'axe jusqu'à elle
+            const rx = Airport.runwayExit(ctx.L, a.pos, ctx.th, ctx.end, g, 60);
+            if (rx) {
+              a.path = [{ ...a.pos }, rx.abeam, ...rx.pts];
+            } else {
+              const ex = Airport.exitPoint(ctx.L, move(a.pos, a.hdg, 150), ctx.th, ctx.end);
+              const r = ex && g ? Airport.taxiBetween(ctx.L, ex, g) : null;
+              a.path = [{ ...a.pos }, ...(ex ? [ex] : []), ...(r ? r.pts : [])];
+            }
             if (g) a.path.push({ lat: g.lat, lon: g.lon });
             a.gate = g && g.ref; a.state = 'vacate'; a.light = false;
             this.radio(a, 'TWR', 'vacate');
