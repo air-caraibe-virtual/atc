@@ -1,5 +1,5 @@
 // ATC — processus principal : fenêtre, liaison SimConnect (MSFS 2024), accès réseau.
-const { app, BrowserWindow, ipcMain, net, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, net, shell, Notification } = require('electron');
 const path = require('path');
 const { MsEdgeTTS, OUTPUT_FORMAT } = require('msedge-tts');
 const {
@@ -585,6 +585,26 @@ const newer = (a, b) => {
   return false;
 };
 ipcMain.handle('app-version', () => app.getVersion());
+// Attirer l'attention sur une mise à jour : premier plan (hors vol) ou clignotement + notification Windows (en vol)
+ipcMain.handle('update-attention', (_e, o) => {
+  if (!win || win.isDestroyed()) return;
+  const bringFront = () => {
+    if (win.isMinimized()) win.restore();
+    win.show();
+    win.setAlwaysOnTop(true); win.focus(); win.moveTop();
+    setTimeout(() => { if (win && !win.isDestroyed()) win.setAlwaysOnTop(false); }, 1500);
+    send('update-show');
+  };
+  if (o && o.focus) bringFront();
+  else if (!win.isFocused()) win.flashFrame(true);
+  try {
+    if (Notification.isSupported() && !(o && o.focus && win.isFocused())) {
+      const n = new Notification({ title: o.title || 'Mise à jour d\'ATC disponible', body: o.body || 'Cliquez pour voir les nouveautés.', icon: path.join(__dirname, 'build', 'icon.png') });
+      n.on('click', bringFront);
+      n.show();
+    }
+  } catch (_) {}
+});
 ipcMain.handle('update-check', async (_e, beta) => {
   try {
     // versions finales seulement, ou aussi les bêtas si le pilote l'a choisi

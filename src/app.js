@@ -794,7 +794,15 @@
     if (!box.children.length) box.textContent = 'Améliorations et corrections.';
   }
   let pendingUpdate = null;
-  function showUpdate(u) {
+  // en vol, on ne passe pas devant MSFS : clignotement et notification seulement
+  function playerFlying() {
+    const t = currentTel();
+    return !!(engine.flight && t && t.connected && t.inFlight !== false && t.onGround === false);
+  }
+  function showUpdate(u, fromTimer) {
+    if (fromTimer && api && api.updateAttention) {
+      api.updateAttention({ focus: !playerFlying(), title: `ATC ${u.version}${u.beta ? ' (bêta)' : ''} est disponible`, body: 'Cliquez pour voir les nouveautés et installer la mise à jour.' });
+    }
     pendingUpdate = u;
     $('updTitle').textContent = `Mise à jour disponible : ATC ${u.version}${u.beta ? ' (bêta)' : ''}`;
     $('updSub').textContent = `Vous avez la version ${u.current}. Voici ce qui change :`;
@@ -808,7 +816,7 @@
     const u = await api.updateCheck(!!S.beta);
     if (u && u.ok && u.available) {
       try { if (!manual && localStorage.getItem('atcsolo-skip') === u.version) return; } catch (_) {}
-      showUpdate(u);
+      showUpdate(u, !manual);
     } else if (manual) {
       $('updTitle').textContent = 'Mises à jour';
       $('updSub').textContent = u && u.ok ? `ATC est à jour (version ${u.current}).` : 'Impossible de vérifier les mises à jour pour le moment (connexion Internet ?).';
@@ -854,7 +862,8 @@
       }
     } catch (_) {}
     setTimeout(() => checkUpdate(false), 4000);
-    setInterval(() => checkUpdate(false), 6 * 3600000);
+    setInterval(() => checkUpdate(false), 30 * 60000);
+    if (api.onUpdateShow) api.onUpdateShow(() => { if (pendingUpdate) $('dlgUpdate').classList.remove('hidden'); });
   })();
 
   // Onglets Radio / Carte

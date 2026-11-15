@@ -25,6 +25,8 @@ contextBridge.exposeInMainWorld('sim', {
   setSquawk: (code) => ipcRenderer.invoke('set-squawk', code),
   tts: (text, voice, rate, pitch) => ipcRenderer.invoke('tts', text, voice, rate, pitch),
   appVersion: () => ipcRenderer.invoke('app-version'),
+  updateAttention: (o) => ipcRenderer.invoke('update-attention', o),
+  onUpdateShow: (cb) => ipcRenderer.on('update-show', () => cb()),
   updateCheck: (beta) => ipcRenderer.invoke('update-check', beta),
   updateInstall: (url, version) => ipcRenderer.invoke('update-install', url, version),
   onUpdateProgress: (cb) => ipcRenderer.on('update-progress', (_e, d) => cb(d)),
