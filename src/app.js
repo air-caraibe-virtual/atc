@@ -496,7 +496,10 @@
     addMessage({ from: 'system', text: 'Micro : rien entendu.' });
   }
   // ---------- IA (facultative, clé API du pilote) ----------
-  const aiOn = () => !!(S.aiProvider && window.AtcAI && api && api.aiChat && (S.aiKey || (AtcAI.PROVIDERS[S.aiProvider] || {}).noKey) && (S.aiProvider !== 'local' || aiLocalReady));
+  // adresse du serveur « IA de la compagnie » (Cloudflare) : rien à régler pour les pilotes
+  const COMPANY_AI_URL = '';
+  const companyUrl = () => (S.aiCompanyUrl || COMPANY_AI_URL || '').trim();
+  const aiOn = () => !!(S.aiProvider && window.AtcAI && api && api.aiChat && (S.aiKey || (AtcAI.PROVIDERS[S.aiProvider] || {}).noKey) && (S.aiProvider !== 'local' || aiLocalReady) && (S.aiProvider !== 'company' || companyUrl()));
   let aiLocalReady = false, aiLocalBusy = false;
   function aiHint() {
     const p = window.AtcAI && AtcAI.PROVIDERS[S.aiProvider];
@@ -507,13 +510,15 @@
     document.querySelectorAll('.ai-key-only').forEach((el) => el.classList.toggle('hidden', noKey));
     if ($('aiLocalBox')) $('aiLocalBox').classList.toggle('hidden', S.aiProvider !== 'local');
     if ($('aiFreeBox')) $('aiFreeBox').classList.toggle('hidden', S.aiProvider !== 'free');
+    if ($('aiCompanyBox')) $('aiCompanyBox').classList.toggle('hidden', S.aiProvider !== 'company');
+    if ($('aiCompanyUrlRow')) $('aiCompanyUrlRow').classList.toggle('hidden', !!COMPANY_AI_URL && !S.aiCompanyUrl);
     if ($('aiOllamaBox')) $('aiOllamaBox').classList.toggle('hidden', S.aiProvider !== 'ollama');
-    if ($('setAiModelRow')) $('setAiModelRow').classList.toggle('hidden', S.aiProvider === 'local' || S.aiProvider === 'free');
+    if ($('setAiModelRow')) $('setAiModelRow').classList.toggle('hidden', ['local', 'free', 'company'].includes(S.aiProvider));
     $('freeBar') && $('freeBar').classList.toggle('hidden', !aiOn() && !engine.flight);
   }
   async function aiAsk(system, messages, maxTokens) {
     const p = AtcAI.PROVIDERS[S.aiProvider];
-    return api.aiChat({ provider: S.aiProvider, key: S.aiKey, model: S.aiModel || (p && p.model), system, messages, maxTokens });
+    return api.aiChat({ provider: S.aiProvider, key: S.aiKey, model: S.aiModel || (p && p.model), url: companyUrl(), system, messages, maxTokens });
   }
   // Renvoie true si l'IA a traité le message
   async function aiHandle(said, mode, detected) {
@@ -871,7 +876,7 @@
   if ($('btnQuit')) $('btnQuit').onclick = () => { if (api && api.quitApp) api.quitApp(); else window.close(); };
   $('btnSettings').onclick = () => {
     $('setLang').value = S.radioMode; $('setTts').value = S.ttsEngine; $('setFx').value = S.radioFx; fillVoiceSelect(); $('setRate').value = S.rate; $('setVol').value = S.volume;
-    $('setSquelch').checked = S.squelch; $('setPilotVoice').checked = S.pilotVoice; $('setCom').checked = S.requireCom; $('setAutoCom').checked = S.autoCom; $('setAutoXpdr').checked = S.autoXpdr; $('setAutoPush').checked = S.autoPush !== false; $('setTrafficMax').value = String(S.trafficMax || 16); $('setFsltl').checked = S.preferFsltl !== false; $('setAutoRb').checked = S.autoReadback; $('setAiProvider').value = S.aiProvider || ''; $('setAiKey').value = S.aiKey || ''; $('setAiModel').value = S.aiModel || ''; aiHint(); $('setMic').checked = !!S.mic; $('setMicModel').value = S.micModel || 'small'; pttShow();
+    $('setSquelch').checked = S.squelch; $('setPilotVoice').checked = S.pilotVoice; $('setCom').checked = S.requireCom; $('setAutoCom').checked = S.autoCom; $('setAutoXpdr').checked = S.autoXpdr; $('setAutoPush').checked = S.autoPush !== false; $('setTrafficMax').value = String(S.trafficMax || 16); $('setFsltl').checked = S.preferFsltl !== false; $('setAutoRb').checked = S.autoReadback; $('setAiProvider').value = S.aiProvider || ''; $('setAiCompanyUrl').value = S.aiCompanyUrl || ''; $('setAiKey').value = S.aiKey || ''; $('setAiModel').value = S.aiModel || ''; aiHint(); $('setMic').checked = !!S.mic; $('setMicModel').value = S.micModel || 'small'; pttShow();
     $('dlgSettings').classList.remove('hidden');
   };
   const bindSetting = (id, key, conv) => { $(id).onchange = (e) => { S[key] = conv(e.target); save(); if (key === 'radioMode') { S.lang = S.radioMode === 'en' ? 'en' : 'fr'; save(); setTimeout(fillVoiceSelect); engine.uiLang = S.lang; engine.setRadioMode(S.radioMode); } render(); }; };
@@ -889,6 +894,7 @@
   bindSetting('setAiProvider', 'aiProvider', (e) => { setTimeout(() => { aiHint(); if (e.value === 'local') aiPrepareLocal(true); if (e.value === 'ollama') ollamaDetect(); }); if (e.value !== S.aiProvider) { S.aiModel = ''; $('setAiModel').value = ''; } /* nouveau fournisseur : modèle conseillé */ return e.value; });
   bindSetting('setAiKey', 'aiKey', (e) => { setTimeout(aiHint); return e.value.trim().replace(/\s+/g, ''); });
   bindSetting('setAiModel', 'aiModel', (e) => e.value.trim());
+  bindSetting('setAiCompanyUrl', 'aiCompanyUrl', (e) => { setTimeout(aiHint); return e.value.trim(); });
   bindSetting('setMic', 'mic', (e) => { setTimeout(micSetup); return e.checked; });
   bindSetting('setMicModel', 'micModel', (e) => { Mic.ready = false; Mic.announced = false; setTimeout(micSetup); return e.value; });
   // ---- Détection de la touche du micro (PTT) : clavier ou bouton de joystick ----

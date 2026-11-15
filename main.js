@@ -763,6 +763,17 @@ ipcMain.handle('ai-chat', async (_e, o) => {
     try { return { ok: true, text: await require('./llm.js').chat(llmDir(), system, messages, maxTokens, (p) => send('ai-progress', p)) }; }
     catch (e) { return { ok: false, error: 'IA intégrée : ' + String(e.message || e) }; }
   }
+  // IA de la compagnie : serveur de la compagnie (Cloudflare) qui garde la clé, rien à faire pour le pilote
+  if (provider === 'company') {
+    const base = String(o.url || '').trim().replace(/\/+$/, '');
+    if (!/^https:\/\//.test(base)) return { ok: false, error: 'adresse de l\'IA de la compagnie manquante' };
+    try {
+      const r = await net.fetch(base + '/chat', { method: 'POST', headers: { 'content-type': 'application/json', 'x-atc-app': 'ATC-MSFS' }, body: JSON.stringify({ system, messages, maxTokens }) });
+      const j = await r.json().catch(() => ({}));
+      if (r.ok && j.ok && j.text) return { ok: true, text: j.text };
+      return { ok: false, error: j.error || ('HTTP ' + r.status) };
+    } catch (e) { return { ok: false, error: 'IA de la compagnie injoignable' }; }
+  }
   // IA en ligne gratuite sans clé : services publics gratuits (sans garantie, limités en nombre de messages)
   if (provider === 'free') {
     const errs = [];

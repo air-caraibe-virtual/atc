@@ -229,3 +229,4 @@ input[type=checkbox] { accent-color: var(--accent); }
 .msg.copilot .who span:first-child::before { content: '👨‍✈️ '; }
 #dlgAiHelp { z-index: 6000; }
 .ai-sub { display: flex; flex-direction: column; gap: 6px; } .ai-sub.hidden, .ai-key-only.hidden, #setAiModelRow.hidden { display: none; } .ai-sub code { background: rgba(255,255,255,.08); padding: 1px 5px; border-radius: 4px; }
+#aiCompanyUrlRow.hidden { display: none; }
