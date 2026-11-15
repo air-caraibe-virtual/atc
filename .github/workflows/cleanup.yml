@@ -1,0 +1,24 @@
+name: Nettoyer les anciennes versions
+# Efface les versions listées dans .github/cleanup-releases.txt (une par ligne), avec leur étiquette.
+on:
+  push:
+    branches: [main]
+    paths: ['.github/cleanup-releases.txt']
+permissions:
+  contents: write
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Effacer les versions
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          grep -v '^\s*#' .github/cleanup-releases.txt | sed '/^\s*$/d' | while read -r tag; do
+            if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+              gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag && echo "effacé : $tag"
+            else
+              echo "déjà absent : $tag"
+            fi
+          done
