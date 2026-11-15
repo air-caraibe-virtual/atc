@@ -97,7 +97,7 @@
       // hors des aéroports, en vol : trafic en route (vrais vols autour du joueur)
       const enroute = !ctx && tel && tel.lat != null && tel.onGround === false && engine.flight;
       const key = ctx ? ctx.a.icao + ctx.a.rwy + (ctx.a.rwyTakeoff || '') + (ctx.a.rwyLand || '') : enroute ? 'ENROUTE' : null;
-      if (key !== this.side) { this.clear(); this.side = key; this.nextSpawn = now + 8000; this.liveAt = 0; this.live = null; }
+      if (key !== this.side) { this.clear(); this.side = key; this.nextSpawn = now + 8000; this.liveAt = 0; this.live = null; this.conflictCache = {}; }
       if (enroute) { this.ctx = null; return this.enrouteTick(now, dt, tel); }
       if (!ctx) return;
       this.ctx = ctx;
@@ -438,7 +438,8 @@
         case 'lined':
           a.hdg = turnTo(a.hdg, ctx.hdg, 20 * dt);
           if (!a.linedAt) a.linedAt = t;
-          if (a.afterLineup === 'takeoff' && angDiff(a.hdg, ctx.hdg) < 3 && t - a.linedAt > 4000) { a.state = 'takeoff'; a.v = 0; }
+          // aligné : on ne part pas tant que le joueur occupe une piste en conflit (atterrissage, roulage sur la piste)
+          if (a.afterLineup === 'takeoff' && angDiff(a.hdg, ctx.hdg) < 3 && t - a.linedAt > 4000 && !this.playerBlocks(this.rwyOf(a).strip)) { a.state = 'takeoff'; a.v = 0; }
           break;
         case 'takeoff': {
           a.light = true; a.hdg = turnTo(a.hdg, ctx.hdg, 5 * dt);
@@ -529,11 +530,46 @@
     // ---------- État de la piste ----------
     rwyOf(a) { const c = this.ctx; return a.kind === 'dep' ? c.D : c.A; }
     // avion qui occupe la piste (même bande de piste que « strip », ou n'importe laquelle si non précisée)
+    // Deux pistes « en conflit » : la même, ou qui se croisent / passent à moins de 200 m l'une de l'autre
+    stripsConflict(a, b) {
+      if (!a || !b) return true;
+      if (a === b) return true;
+      const c = this.ctx; if (!c) return true;
+      this.conflictCache = this.conflictCache || {};
+      const key = a < b ? a + '|' + b : b + '|' + a;
+      if (key in this.conflictCache) return this.conflictCache[key];
+      const ra = c.L.runways.find((r) => r.ref === a), rb = c.L.runways.find((r) => r.ref === b);
+      let res = true;
+      if (ra && rb) {
+        const A1 = ra.pts[0], A2 = ra.pts[ra.pts.length - 1], B1 = rb.pts[0], B2 = rb.pts[rb.pts.length - 1];
+        // distance minimale entre les deux axes (échantillonnage tous les ~50 m)
+        let min = Infinity;
+        const n = Math.max(2, Math.ceil(M(A1, A2) / 50));
+        for (let i = 0; i <= n; i++) {
+          const p = { lat: A1.lat + (A2.lat - A1.lat) * i / n, lon: A1.lon + (A2.lon - A1.lon) * i / n };
+          const al = Airport.alongRunway(p, B1, B2);
+          const d = al.t >= 0 && al.t <= 1 ? al.xt : Math.min(M(p, B1), M(p, B2));
+          if (d < min) min = d;
+        }
+        res = min < 200;
+      }
+      this.conflictCache[key] = res;
+      return res;
+    }
+    // Piste occupée par le joueur : celle sur laquelle il roule, ou sa piste d'atterrissage en courte finale
+    playerStrip() {
+      const tel = this.tel, c = this.ctx; if (!tel || !c || tel.lat == null) return null;
+      if (tel.onGround) return Airport.runwayAt(c.L, tel);
+      const pd = this.playerFinal();
+      return pd != null && pd < 3 ? c.P.strip : null;
+    }
+    playerBlocks(strip) { const ps = this.playerStrip(); return !!ps && this.stripsConflict(ps, strip); }
+
     runwayOccupant(exclude, strip) {
       const c = this.ctx; if (!c) return null;
       for (const a of this.ai) {
         if (a === exclude) continue;
-        if (strip && this.rwyOf(a).strip !== strip) continue;
+        if (strip && !this.stripsConflict(this.rwyOf(a).strip, strip)) continue;
         if (['lined', 'rollout', 'cleared_to'].includes(a.state) || (a.state === 'takeoff' && a.onGround) || (a.state === 'lineup' && a.path && a.path.length <= 2) || a.state === 'vacate') return a;
       }
       return null;
@@ -547,8 +583,8 @@
     // arrivée la plus proche sur une bande de piste donnée (IA ou joueur)
     nearestArrival(exclude, strip) {
       let best = null;
-      for (const a of this.ai) if (a !== exclude && a.state === 'approach' && a.d != null && (!strip || this.rwyOf(a).strip === strip)) best = best == null ? a.d : Math.min(best, a.d);
-      const pd = this.playerFinal(); if (pd != null && (!strip || this.ctx.P.strip === strip)) best = best == null ? pd : Math.min(best, pd);
+      for (const a of this.ai) if (a !== exclude && a.state === 'approach' && a.d != null && (!strip || this.stripsConflict(this.rwyOf(a).strip, strip))) best = best == null ? a.d : Math.min(best, a.d);
+      const pd = this.playerFinal(); if (pd != null && (!strip || this.stripsConflict(this.ctx.P.strip, strip))) best = best == null ? pd : Math.min(best, pd);
       return best;
     }
 
@@ -585,15 +621,15 @@
       const playerWaiting = this.engine && ['HOLDING', 'LINEUP'].includes(this.engine.phase) && ctx.side === 'dep' && this.engine.flags.waitDep;
       const playerRolling = this.engine && ['LINEUP', 'TAKEOFF'].includes(this.engine.phase) && this.tel && this.tel.onGround && ctx.side === 'dep';
       const Ds = ctx.D.strip, As = ctx.A.strip;
-      const playerOnD = playerRolling && ctx.P.strip === Ds;
-      if (holding.length && !playerWaiting && !playerOnD && !this.runwayOccupant(null, Ds) && !this.playerOnRunway(ctx.D)) {
+      const playerOnD = playerRolling && this.stripsConflict(ctx.P.strip, Ds);
+      if (holding.length && !playerWaiting && !playerOnD && !this.runwayOccupant(null, Ds) && !this.playerBlocks(Ds)) {
         const arr = this.nearestArrival(null, Ds);
         if ((arr == null || arr > 6) && this.now - (this.lastTakeoff || -1e9) > 75000) this.request(holding[0], 'takeoff');
       }
       // arrivées IA : autorisation d'atterrissage à 6 NM si piste libre (sinon plus tard, ou remise de gaz)
       for (const a of this.ai) {
         if (a.state !== 'approach' || a.cleared || a.d == null) continue;
-        if (a.d < 6 && !this.runwayOccupant(a, As) && !this.playerOnRunway(ctx.A) && !(playerRolling && ctx.P.strip === As)) this.request(a, 'land');
+        if (a.d < 6 && !this.runwayOccupant(a, As) && !this.playerBlocks(As) && !(playerRolling && this.stripsConflict(ctx.P.strip, As))) this.request(a, 'land');
         else if (a.d < 4 && !a.contApp) { a.contApp = true; this.radio(a, 'TWR', 'continue'); }
       }
     }

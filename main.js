@@ -14,7 +14,7 @@ let retryTimer = null;
 
 const DEF_TEL = 0, REQ_TEL = 0, DEF_FAC = 1, DEF_FENIX = 2, REQ_FENIX = 2, DEF_FENIX_XFER = 3;
 // ---- Trafic IA créé et piloté par ATC ----
-const DEF_AIPOS = 10, DEF_AIGND = 11, DEF_AIGEAR = 12, EV_GEAR_SET = 61, REQ_MODELS = 40, REQ_AI_BASE = 1000, REQ_AIGND_BASE = 5000;
+const DEF_AIPOS = 10, DEF_AIGND = 11, DEF_AIGEAR = 12, DEF_AIGEARPOS = 13, EV_GEAR_SET = 61, REQ_MODELS = 40, REQ_AI_BASE = 1000, REQ_AIGND_BASE = 5000;
 const EV_FRZ_LL = 50, EV_FRZ_ALT = 51, EV_FRZ_ATT = 52, EV_GEAR_UP = 53, EV_GEAR_DN = 54, EV_LAND_ON = 55, EV_LAND_OFF = 56, EV_BCN_ON = 57, EV_STROBE_ON = 58, EV_STROBE_OFF = 59, EV_ENG_AUTO = 60;
 const ai = { byReq: new Map(), byLocal: new Map(), byObj: new Map(), models: null, modelsWait: [] };
 // Fenix A320/A319/A321 : la radio passe par le RMP de l'avion (variables internes en kHz)
@@ -153,6 +153,8 @@ async function connectSim() {
         .forEach(([n, u]) => handle.addToDataDefinition(DEF_AIPOS, n, u, SimConnectDataType.FLOAT64));
       [['GROUND ALTITUDE', 'feet'], ['STATIC CG TO GROUND', 'feet']].forEach(([n, u]) => handle.addToDataDefinition(DEF_AIGND, n, u, SimConnectDataType.FLOAT64));
       handle.addToDataDefinition(DEF_AIGEAR, 'GEAR HANDLE POSITION', 'bool', SimConnectDataType.FLOAT64);
+      // position réelle des trains (0 = rentré, 1 = sorti) : réglée directement, car les avions figés n'animent pas toujours leur train
+      ['GEAR CENTER POSITION', 'GEAR LEFT POSITION', 'GEAR RIGHT POSITION'].forEach((n) => handle.addToDataDefinition(DEF_AIGEARPOS, n, 'percent over 100', SimConnectDataType.FLOAT64));
       handle.mapClientEventToSimEvent(EV_GEAR_SET, 'GEAR_SET');
       [[EV_FRZ_LL, 'FREEZE_LATITUDE_LONGITUDE_SET'], [EV_FRZ_ALT, 'FREEZE_ALTITUDE_SET'], [EV_FRZ_ATT, 'FREEZE_ATTITUDE_SET'], [EV_GEAR_UP, 'GEAR_UP'], [EV_GEAR_DN, 'GEAR_DOWN'],
         [EV_LAND_ON, 'LANDING_LIGHTS_ON'], [EV_LAND_OFF, 'LANDING_LIGHTS_OFF'], [EV_BCN_ON, 'BEACON_LIGHTS_ON'], [EV_STROBE_ON, 'STROBES_ON'], [EV_STROBE_OFF, 'STROBES_OFF'], [EV_ENG_AUTO, 'ENGINE_AUTO_START']]
@@ -337,6 +339,20 @@ function aiFrame() {
       [d.lat, d.lon, alt, d.pitch, d.bank, d.hdg].forEach((v) => buf.writeFloat64(v));
       handle.setDataOnSimObject(DEF_AIPOS, o.obj, { buffer: buf, arrayCount: 0, tagged: false });
     } catch (_) {}
+    // train : rentrée / sortie progressive (≈ 8 s), écrite directement dans les positions de train
+    if (o.wantGear != null) {
+      const target = o.wantGear ? 1 : 0;
+      if (o.gearPos == null) o.gearPos = target;
+      if (o.gearPos !== target || now - (o.gearSent || 0) > 2000) {
+        o.gearPos = o.gearPos < target ? Math.min(target, o.gearPos + dtF / 8) : Math.max(target, o.gearPos - dtF / 8);
+        o.gearSent = now;
+        try {
+          const gb = new RawBuffer(24);
+          [o.gearPos, o.gearPos, o.gearPos].forEach((v) => gb.writeFloat64(v));
+          handle.setDataOnSimObject(DEF_AIGEARPOS, o.obj, { buffer: gb, arrayCount: 0, tagged: false });
+        } catch (_) {}
+      }
+    }
     // on refige régulièrement (certains avions se « réveillent » quand on s'en approche)
     if (now - (o.lastFreeze || 0) > 4000) {
       o.lastFreeze = now;
