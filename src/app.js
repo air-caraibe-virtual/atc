@@ -497,7 +497,7 @@
   }
   // ---------- IA (facultative, clé API du pilote) ----------
   // adresse du serveur « IA de la compagnie » (Cloudflare) : rien à régler pour les pilotes
-  const COMPANY_AI_URL = '';
+  const COMPANY_AI_URL = 'https://ia-atc.atc-compagnie.workers.dev';
   const companyUrl = () => (S.aiCompanyUrl || COMPANY_AI_URL || '').trim();
   const aiOn = () => !!(S.aiProvider && window.AtcAI && api && api.aiChat && (S.aiKey || (AtcAI.PROVIDERS[S.aiProvider] || {}).noKey) && (S.aiProvider !== 'local' || aiLocalReady) && (S.aiProvider !== 'company' || companyUrl()));
   let aiLocalReady = false, aiLocalBusy = false;
