@@ -177,3 +177,20 @@ input[type=checkbox] { accent-color: var(--accent); }
 .version-row { justify-content: space-between; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
 
 .mapview { isolation: isolate; z-index: 0; }
+
+/* Langue radio : « Je parle : » */
+.speak-bar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 8px 14px 0; border-top: 1px solid var(--line); }
+.speak-bar.hidden { display: none; }
+.speak-bar + .actions { border-top: 0; }
+.speak-lab { font-size: 12px; color: var(--muted, #8fa0b8); margin-right: 2px; }
+.speak-bar .chip { font-size: 11px; font-weight: 700; letter-spacing: .04em; padding: 4px 9px; border-radius: 999px; background: transparent; border: 1px solid var(--line); color: var(--muted, #8fa0b8); cursor: pointer; opacity: .55; }
+.speak-bar .chip.ok { opacity: 1; color: inherit; }
+.speak-bar .chip.on { background: #2f6fed; border-color: #2f6fed; color: #fff; opacity: 1; }
+.speak-bar .chip.on:not(.ok) { background: #b8323a; border-color: #b8323a; }
+.speak-hint { font-size: 11px; color: var(--muted, #8fa0b8); margin-left: 6px; }
+.msg[data-lang] .txt::before { content: attr(data-lang); font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: 4px; margin-right: 6px; background: rgba(255,255,255,.08); }
+
+/* Micro */
+.actions .act.mic { border-style: dashed; }
+.actions .act.mic.rec { border-color: #e5484d; background: rgba(229,72,77,.15); animation: micpulse 1.2s ease-in-out infinite; }
+@keyframes micpulse { 50% { box-shadow: 0 0 0 4px rgba(229,72,77,.25); } }

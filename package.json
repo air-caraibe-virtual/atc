@@ -7,6 +7,7 @@
   "author": "ATC",
   "license": "UNLICENSED",
   "dependencies": {
+    "@huggingface/transformers": "3.8.1",
     "leaflet": "^1.9.4",
     "msedge-tts": "^2.1.1",
     "node-simconnect": "^4.0.0"
@@ -27,9 +28,18 @@
     "files": [
       "main.js",
       "preload.js",
+      "stt.js",
       "src/**/*",
       "package.json",
-      "build/icon.png"
+      "build/icon.png",
+      "!node_modules/onnxruntime-node/bin/napi-v3/darwin/**",
+      "!node_modules/onnxruntime-node/bin/napi-v3/linux/**",
+      "!node_modules/onnxruntime-node/bin/napi-v3/win32/arm64/**",
+      "!node_modules/onnxruntime-web/**",
+      "!node_modules/@huggingface/transformers/dist/*.map",
+      "!node_modules/@huggingface/transformers/dist/transformers.{js,min.js,web.js,web.min.js}",
+      "!node_modules/@huggingface/transformers/dist/ort-wasm*",
+      "!node_modules/@huggingface/transformers/src/**"
     ],
     "win": {
       "target": "dir",
@@ -41,6 +51,11 @@
     "copyright": "© 2026 ATC",
     "directories": {
       "buildResources": "build"
-    }
+    },
+    "asarUnpack": [
+      "node_modules/onnxruntime-node/**",
+      "node_modules/sharp/**",
+      "node_modules/@img/**"
+    ]
   }
 }

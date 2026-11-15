@@ -1,5 +1,5 @@
 // ATC — processus principal : fenêtre, liaison SimConnect (MSFS 2024), accès réseau.
-const { app, BrowserWindow, ipcMain, net, shell, Notification } = require('electron');
+const { app, BrowserWindow, ipcMain, net, shell, Notification, globalShortcut, session } = require('electron');
 const path = require('path');
 const { MsEdgeTTS, OUTPUT_FORMAT } = require('msedge-tts');
 const {
@@ -465,6 +465,31 @@ ipcMain.handle('airport-layout', async (_e, icao, lat, lon) => {
   }
   try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch (_) { return null; }
 });
+// Aéroport le plus proche (pour le trafic réel sans plan de vol)
+const nearCache = new Map();
+ipcMain.handle('nearest-airport', async (_e, lat, lon) => {
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  const key = lat.toFixed(2) + ',' + lon.toFixed(2);
+  if (nearCache.has(key)) return nearCache.get(key);
+  const q = `[out:json][timeout:25];nwr["aeroway"="aerodrome"]["icao"~"^[A-Z]{4}$"](around:9000,${lat.toFixed(5)},${lon.toFixed(5)});out center tags;`;
+  for (const url of ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://maps.mail.ru/osm/tools/overpass/api/interpreter']) {
+    try {
+      const r = await net.fetch(url, { method: 'POST', body: 'data=' + encodeURIComponent(q), headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'ATC-MSFS/1.4' } });
+      if (!r.ok) continue;
+      const json = await r.json();
+      const rad = (d) => d * Math.PI / 180;
+      const list = (json.elements || []).map((el) => {
+        const la = el.lat != null ? el.lat : el.center && el.center.lat, lo = el.lon != null ? el.lon : el.center && el.center.lon;
+        const t = el.tags || {};
+        const d = Math.hypot(la - lat, (lo - lon) * Math.cos(rad(lat)));
+        return { icao: t.icao, name: t['name:fr'] || t.name || t.icao, city: t['addr:city'] || null, lat: la, lon: lo, d };
+      }).filter((x) => x.icao && Number.isFinite(x.lat)).sort((a, b) => a.d - b.d);
+      nearCache.set(key, list);
+      return list;
+    } catch (_) {}
+  }
+  return null;
+});
 ipcMain.handle('set-com1', (_e, mhz, method) => {
   if (!handle) return false;
   const ev = (id, val) => handle.transmitClientEvent(SimConnectConstants.OBJECT_ID_USER, id, val, NotificationPriority.HIGHEST, EventFlag.EVENT_FLAG_GROUPID_IS_PRIORITY);
@@ -670,6 +695,34 @@ ipcMain.handle('update-install', async (_e, url, version) => {
   } catch (e) { return { ok: false, error: String(e.message || e) }; }
 });
 
+// ---------- Micro : reconnaissance vocale (Whisper hors ligne) ----------
+const sttDir = () => path.join(app.getPath('userData'), 'models');
+const sttProgress = (p) => send('stt-progress', p);
+ipcMain.handle('stt-prepare', async () => {
+  try { await require('./stt.js').load(sttDir(), sttProgress); send('stt-progress', { done: true }); return { ok: true }; }
+  catch (e) { return { ok: false, error: String(e.message || e) }; }
+});
+ipcMain.handle('stt-transcribe', async (_e, samples, langs) => {
+  try {
+    const arr = samples instanceof Float32Array ? samples : new Float32Array(samples && samples.buffer ? samples.buffer : samples);
+    const r = await require('./stt.js').transcribe(sttDir(), arr, langs, sttProgress);
+    return { ok: true, ...r };
+  } catch (e) { return { ok: false, error: String(e.message || e) }; }
+});
+// raccourci global (fonctionne même quand MSFS a le focus) : appui = parler, nouvel appui = fin
+let micKey = null;
+ipcMain.handle('mic-shortcut', (_e, accel) => {
+  try { if (micKey) globalShortcut.unregister(micKey); } catch (_) {}
+  micKey = null;
+  if (!accel) return { ok: true };
+  try {
+    const ok = globalShortcut.register(accel, () => send('mic-toggle'));
+    if (ok) micKey = accel;
+    return { ok };
+  } catch (e) { return { ok: false, error: String(e.message || e) }; }
+});
+app.on('will-quit', () => { try { globalShortcut.unregisterAll(); } catch (_) {} });
+
 function createWindow() {
   tileHeaders();
   win = new BrowserWindow({
@@ -685,5 +738,9 @@ function createWindow() {
 
 app.setAppUserModelId('fr.atcsolo.app');
 app.setPath('userData', path.join(app.getPath('appData'), 'ATC Solo'));
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  // autorise le micro pour la fenêtre d'ATC
+  try { session.defaultSession.setPermissionRequestHandler((_wc, perm, cb) => cb(true)); } catch (_) {}
+  createWindow();
+});
 app.on('window-all-closed', () => { if (handle) try { handle.close(); } catch (_) {} app.quit(); });

@@ -6,11 +6,14 @@
   const api = window.sim || null; // absent si la page est ouverte hors de l'appli
 
   // ---------- Paramètres ----------
-  const DEFAULTS = { lang: 'fr', ttsEngine: 'neural', neuralVoice: 'auto', voice: '', rate: 1.05, volume: 1, radioFx: 'medium', squelch: true, pilotVoice: false, requireCom: false, autoCom: true, autoXpdr: true, autoReadback: true, autoPush: true, traffic: false, sbUser: '', mute: false, v: 3 };
+  const DEFAULTS = { lang: 'fr', ttsEngine: 'neural', neuralVoice: 'auto', voice: '', rate: 1.05, volume: 1, radioFx: 'medium', squelch: true, pilotVoice: false, requireCom: false, autoCom: true, autoXpdr: true, autoReadback: true, autoPush: true, traffic: false, sbUser: '', mute: false, radioMode: 'auto', mic: false, micKey: 'Ctrl+Space', v: 4 };
   let S = { ...DEFAULTS };
   let stored = {};
   try { stored = JSON.parse(localStorage.getItem('atcsolo') || '{}') || {}; S = { ...DEFAULTS, ...stored }; } catch (_) {}
   if ((stored.v || 1) < 3) { if ((stored.v || 1) < 2) { S.autoCom = true; S.autoXpdr = true; } S.autoReadback = true; S.v = 3; try { localStorage.setItem('atcsolo', JSON.stringify(S)); } catch (_) {} }
+  // v4 : langue radio automatique (anglais + langue du pays)
+  if ((stored.v || 1) < 4) { S.radioMode = 'auto'; S.v = 4; try { localStorage.setItem('atcsolo', JSON.stringify(S)); } catch (_) {} }
+  S.lang = S.radioMode === 'en' ? 'en' : 'fr'; // langue de l'interface
   const save = () => { try { localStorage.setItem('atcsolo', JSON.stringify(S)); } catch (_) {} };
 
   // ---------- État ----------
@@ -18,7 +21,7 @@
   let demo = null, demoSpeed = 10;
   let lastStationKey = null;
   let ready = false;
-  const engine = new AtcEngine({ lang: S.lang, onMessage: (m) => addMessage(m), onChange: () => { if (ready) render(); } });
+  const engine = new AtcEngine({ uiLang: S.lang, radioMode: S.radioMode, onMessage: (m) => addMessage(m), onChange: () => { if (ready) render(); } });
 
   // ---------- Voix ----------
   // Voix neuronales (naturelles) : une voix différente par contrôleur, toujours la même pour un même poste.
@@ -26,7 +29,12 @@
     fr: ['fr-FR-HenriNeural', 'fr-FR-DeniseNeural', 'fr-FR-RemyMultilingualNeural', 'fr-FR-VivienneMultilingualNeural', 'fr-CA-AntoineNeural', 'fr-CA-SylvieNeural', 'fr-CH-FabriceNeural', 'fr-BE-GerardNeural', 'fr-CA-JeanNeural', 'fr-CH-ArianeNeural'],
     en: ['en-US-GuyNeural', 'en-US-JennyNeural', 'en-GB-RyanNeural', 'en-US-AriaNeural', 'en-US-ChristopherNeural', 'en-GB-SoniaNeural', 'en-US-EricNeural', 'en-GB-ThomasNeural', 'en-US-MichelleNeural', 'en-US-SteffanNeural'],
   };
-  const PILOT_NEURAL = { fr: 'fr-CA-ThierryNeural', en: 'en-AU-WilliamNeural' };
+  NEURAL.es = ['es-ES-AlvaroNeural', 'es-ES-ElviraNeural', 'es-MX-JorgeNeural', 'es-ES-XimenaNeural', 'es-MX-DaliaNeural', 'es-AR-TomasNeural', 'es-CO-GonzaloNeural', 'es-ES-TristanMultilingualNeural'];
+  NEURAL.de = ['de-DE-ConradNeural', 'de-DE-KatjaNeural', 'de-DE-KillianNeural', 'de-AT-JonasNeural', 'de-CH-JanNeural', 'de-DE-AmalaNeural', 'de-DE-FlorianMultilingualNeural'];
+  NEURAL.it = ['it-IT-DiegoNeural', 'it-IT-ElsaNeural', 'it-IT-IsabellaNeural', 'it-IT-GiuseppeMultilingualNeural'];
+  NEURAL.pt = ['pt-PT-DuarteNeural', 'pt-PT-RaquelNeural', 'pt-BR-AntonioNeural', 'pt-BR-FranciscaNeural', 'pt-BR-ThalitaMultilingualNeural'];
+  const PILOT_NEURAL = { fr: 'fr-CA-ThierryNeural', en: 'en-AU-WilliamNeural', es: 'es-MX-JorgeNeural', de: 'de-AT-JonasNeural', it: 'it-IT-GiuseppeMultilingualNeural', pt: 'pt-BR-AntonioNeural' };
+  const SYS_LOCALE = { fr: 'fr-FR', en: 'en-US', es: 'es-ES', de: 'de-DE', it: 'it-IT', pt: 'pt-PT' };
   const voiceLabel = (n) => n.replace(/Neural$/, '').replace(/^(\w\w-\w\w)-/, '$1 · ').replace('Multilingual', ' (multilingue)');
   let voices = [];
   const speakQueue = [];
@@ -53,11 +61,12 @@
       sel.value = S.voice;
     }
   }
-  function neuralVoiceFor(station, pilot) {
-    if (pilot && station && station !== '__me') { const l = NEURAL[S.lang]; return l[(utils.hash(station) + 3) % l.length]; }
-    if (pilot) return PILOT_NEURAL[S.lang];
-    if (S.neuralVoice !== 'auto' && NEURAL[S.lang].includes(S.neuralVoice)) return S.neuralVoice;
-    const list = NEURAL[S.lang];
+  function neuralVoiceFor(station, pilot, lang) {
+    const L = NEURAL[lang] ? lang : S.lang;
+    if (pilot && station && station !== '__me') { const l = NEURAL[L]; return l[(utils.hash(station) + 3) % l.length]; }
+    if (pilot) return PILOT_NEURAL[L];
+    if (S.neuralVoice !== 'auto' && NEURAL[L].includes(S.neuralVoice)) return S.neuralVoice;
+    const list = NEURAL[L];
     return list[utils.hash(String(station || 'ATC')) % list.length];
   }
   function pickSystemVoice(lang, pilot) {
@@ -142,7 +151,7 @@
   }
   function fetchTts(item) {
     const p = prosody(item);
-    return api.tts(item.text, neuralVoiceFor(item.station, item.pilot), p.rate, p.pitch);
+    return api.tts(item.text, neuralVoiceFor(item.station, item.pilot, item.lang), p.rate, p.pitch);
   }
   async function playNeural(item) {
     if (!api || !api.tts) throw new Error('indisponible');
@@ -165,9 +174,10 @@
       if (!('speechSynthesis' in window)) return resolve();
       await squelch(false);
       const u = new SpeechSynthesisUtterance(item.text);
-      const v = pickSystemVoice(S.lang, item.pilot);
+      const L = SYS_LOCALE[item.lang] ? item.lang : S.lang;
+      const v = pickSystemVoice(L, item.pilot);
       if (v) u.voice = v;
-      u.lang = S.lang === 'fr' ? 'fr-FR' : 'en-US';
+      u.lang = SYS_LOCALE[L];
       u.rate = S.rate; u.volume = S.volume; u.pitch = item.pilot ? 0.9 : 1;
       const done = async () => { await squelch(true); resolve(); };
       u.onend = done; u.onerror = done;
@@ -224,7 +234,7 @@
       who.children[1].textContent = m.from === 'atc' && m.freq ? utils.freqTxt(m.freq) : '';
       if (m.from === 'atc' || m.atis) {
         const b = document.createElement('button'); b.className = 'replay'; b.title = 'Réécouter'; b.textContent = '🔊';
-        b.onclick = () => say(m.speech, { el, station: m.atis ? 'ATIS' : m.station, role: m.atis ? 'ATIS' : m.role });
+        b.onclick = () => say(m.speech, { el, lang: m.lang, station: m.atis ? 'ATIS' : m.station, role: m.atis ? 'ATIS' : m.role });
         who.appendChild(b);
       }
       el.appendChild(who);
@@ -233,9 +243,10 @@
     el.appendChild(txt);
     log.appendChild(el);
     log.scrollTop = log.scrollHeight;
-    if (m.from === 'atc' || m.atis) say(m.speech, { el, station: m.atis ? 'ATIS' : m.station, role: m.atis ? 'ATIS' : m.role });
-    else if (m.from === 'pilot' && S.pilotVoice) say(m.speech, { el, pilot: true, station: '__me' });
-    else if (m.from === 'aipilot') say(m.speech, { el, pilot: true, station: m.cs });
+    if (m.lang && m.lang !== 'fr' && m.lang !== 'en' && m.from !== 'system') el.dataset.lang = m.lang.toUpperCase();
+    if (m.from === 'atc' || m.atis) say(m.speech, { el, lang: m.lang, station: m.atis ? 'ATIS' : m.station, role: m.atis ? 'ATIS' : m.role });
+    else if (m.from === 'pilot' && S.pilotVoice) say(m.speech, { el, lang: m.lang, pilot: true, station: '__me' });
+    else if (m.from === 'aipilot') say(m.speech, { el, lang: m.lang, pilot: true, station: m.cs });
   }
 
   // ---------- Télémétrie ----------
@@ -296,6 +307,28 @@
     renderActions(comOk, com);
   }
 
+  // « Je parle : » — langue dans laquelle le pilote s'adresse au contrôleur (mode automatique)
+  function renderSpeak() {
+    const bar = $('speakBar'); if (!bar) return;
+    if (S.radioMode !== 'auto' || !engine.flight || engine.phase === 'DONE') { bar.classList.add('hidden'); return; }
+    bar.classList.remove('hidden');
+    const loc = engine.stationLang();
+    const key = engine.speak + '|' + loc;
+    if (bar.dataset.key === key) return;
+    bar.dataset.key = key; bar.innerHTML = '';
+    const lab = document.createElement('span'); lab.className = 'speak-lab'; lab.textContent = 'Je parle :'; bar.appendChild(lab);
+    window.ATC.RADIO_LANGS.forEach((l) => {
+      const b = document.createElement('button');
+      b.className = 'chip' + (engine.speak === l ? ' on' : '') + (l === 'en' || l === loc ? ' ok' : '');
+      b.textContent = l.toUpperCase();
+      b.title = window.ATC.LANG_NAMES[l] + (l === 'en' ? ' — compris partout' : l === loc ? ' — langue du contrôleur' : ' — le contrôleur ne la comprend pas ici');
+      b.onclick = () => { engine.setSpeak(l); render(); };
+      bar.appendChild(b);
+    });
+    const hint = document.createElement('small'); hint.className = 'speak-hint';
+    hint.textContent = loc === 'en' ? 'Contrôleur anglophone' : `Contrôleur : anglais ou ${window.ATC.LANG_NAMES[loc]}`;
+    bar.appendChild(hint);
+  }
   function renderActions(comOk, com) {
     const box = $('actions'); box.innerHTML = '';
     const notice = $('notice');
@@ -311,6 +344,7 @@
       notice.append(s, b);
     } else notice.classList.add('hidden');
 
+    renderSpeak();
     if (engine.busy) { const w = document.createElement('span'); w.className = 'waiting'; w.textContent = 'Le contrôleur répond'; box.appendChild(w); return; }
     if (!engine.flight) { const b = document.createElement('button'); b.className = 'primary'; b.textContent = 'Charger un vol'; b.onclick = openFlight; box.appendChild(b); return; }
     if (engine.phase === 'DONE') { const b = document.createElement('button'); b.className = 'primary'; b.textContent = 'Nouveau vol'; b.onclick = openFlight; box.appendChild(b); return; }
@@ -330,7 +364,116 @@
       b.onclick = a.needsLevel ? () => openLevel(a.options) : () => engine.pilotAction(a.id);
       box.appendChild(b);
     });
+    micButton(box);
   }
+
+  // ---------- Micro : on parle au contrôleur au lieu de cliquer ----------
+  const Mic = { state: 'off', ready: false, prog: null, stream: null, ac: null, buf: [], timer: null };
+  function micButton(box) {
+    if (!S.mic || !engine.flight || engine.phase === 'DONE') return;
+    const b = document.createElement('button');
+    b.className = 'act mic' + (Mic.state === 'rec' ? ' rec' : '');
+    const key = S.micKey ? ` (${S.micKey.replace('Space', 'Espace')})` : '';
+    const label = { off: '🎙 Parler', loading: '🎙 Préparation…', rec: '🔴 Je parle…', busy: '⏳ Analyse…' }[Mic.state];
+    const sub = Mic.state === 'loading' && Mic.prog ? `Modèle vocal : ${Mic.prog} %` : Mic.state === 'rec' ? 'Cliquez (ou la touche) pour terminer' : Mic.state === 'busy' ? 'Reconnaissance en cours' : 'Appuyez puis parlez' + key;
+    b.innerHTML = '<b></b><small></small>'; b.children[0].textContent = label; b.children[1].textContent = sub;
+    b.disabled = Mic.state === 'loading' || Mic.state === 'busy';
+    b.onclick = () => (Mic.state === 'rec' ? micStop() : micStart());
+    box.appendChild(b);
+  }
+  async function micPrepare() {
+    if (Mic.ready || !api || !api.sttPrepare) return Mic.ready;
+    if (Mic.preparing) return Mic.preparing;
+    Mic.preparing = (async () => {
+      const r = await api.sttPrepare();
+      Mic.preparing = null; Mic.prog = null;
+      if (r && r.ok) { Mic.ready = true; return true; }
+      addMessage({ from: 'system', text: `Micro : impossible de préparer la reconnaissance vocale (${(r && r.error) || 'erreur'}). Vérifiez la connexion Internet pour le premier téléchargement.` });
+      return false;
+    })();
+    return Mic.preparing;
+  }
+  function micSetup() {
+    if (api && api.micShortcut) api.micShortcut(S.mic ? (S.micKey || null) : null).then((r) => { if (S.mic && S.micKey && r && !r.ok) addMessage({ from: 'system', text: `Micro : la touche ${S.micKey} est déjà prise par une autre application, choisissez-en une autre dans les paramètres.` }); });
+    if (S.mic && !Mic.ready) { if (!Mic.ready) addMessage({ from: 'system', text: 'Micro activé : préparation de la reconnaissance vocale (premier lancement : téléchargement d\'environ 80 Mo, une seule fois).' }); micPrepare().then((ok) => { if (ok) addMessage({ from: 'system', text: 'Micro prêt : appuyez sur « 🎙 Parler »' + (S.micKey ? ` ou sur ${S.micKey}` : '') + ', dites votre message, puis appuyez de nouveau (ou taisez-vous une seconde).' }); render(); }); }
+    render();
+  }
+  if (api && api.onSttProgress) api.onSttProgress((p) => { if (p && p.total) { Mic.prog = Math.round((p.loaded / p.total) * 100); render(); } });
+  if (api && api.onMicToggle) api.onMicToggle(() => (Mic.state === 'rec' ? micStop() : micStart()));
+  async function micStart() {
+    if (!S.mic || Mic.state !== 'off') return;
+    if (!engine.flight) { addMessage({ from: 'system', text: 'Micro : chargez d\'abord un plan de vol.' }); return; }
+    if (!Mic.ready) { Mic.state = 'loading'; render(); const ok = await micPrepare(); Mic.state = 'off'; render(); if (!ok) return; }
+    try {
+      Mic.stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+    } catch (e) { addMessage({ from: 'system', text: 'Micro : aucun micro accessible (' + (e.message || e.name) + '). Vérifiez Windows > Confidentialité > Microphone.' }); return; }
+    const ac = Mic.ac = new AudioContext({ sampleRate: 16000 });
+    const src = ac.createMediaStreamSource(Mic.stream);
+    const proc = ac.createScriptProcessor(4096, 1, 1);
+    Mic.buf = []; let spoke = false, quietMs = 0, totalMs = 0;
+    proc.onaudioprocess = (ev) => {
+      if (Mic.state !== 'rec') return;
+      const d = ev.inputBuffer.getChannelData(0); Mic.buf.push(new Float32Array(d));
+      let e2 = 0; for (let i = 0; i < d.length; i++) e2 += d[i] * d[i];
+      const rms = Math.sqrt(e2 / d.length), ms = (d.length / ac.sampleRate) * 1000;
+      totalMs += ms;
+      if (rms > 0.025) { spoke = true; quietMs = 0; } else if (spoke) quietMs += ms;
+      // fin automatique : 1,3 s de silence après avoir parlé, ou 15 s au maximum
+      if ((spoke && quietMs > 1300) || totalMs > 15000 || (!spoke && totalMs > 7000)) micStop(!spoke);
+    };
+    src.connect(proc); proc.connect(ac.destination);
+    Mic.state = 'rec'; render();
+    try { squelch(false); } catch (_) {}
+  }
+  async function micStop(cancel) {
+    if (Mic.state !== 'rec') return;
+    Mic.state = 'busy'; render();
+    try { Mic.stream.getTracks().forEach((t) => t.stop()); } catch (_) {}
+    const sr = Mic.ac ? Mic.ac.sampleRate : 16000;
+    try { await Mic.ac.close(); } catch (_) {}
+    let n = 0; Mic.buf.forEach((b) => { n += b.length; });
+    let pcm = new Float32Array(n); let o = 0; Mic.buf.forEach((b) => { pcm.set(b, o); o += b.length; }); Mic.buf = [];
+    if (sr !== 16000) { // le navigateur a refusé 16 kHz : rééchantillonnage simple
+      const k = sr / 16000, out = new Float32Array(Math.floor(pcm.length / k));
+      for (let i = 0; i < out.length; i++) out[i] = pcm[Math.floor(i * k)];
+      pcm = out;
+    }
+    if (cancel || pcm.length < 16000 * 0.4) { Mic.state = 'off'; render(); addMessage({ from: 'system', text: 'Micro : rien entendu.' }); return; }
+    const langs = [engine.pilotLang(), 'en', engine.stationLang()];
+    let r = null;
+    try { r = await api.sttTranscribe(pcm, langs); } catch (e) { r = { ok: false, error: e.message }; }
+    Mic.state = 'off';
+    handleSpeech(r);
+    render();
+  }
+  function handleSpeech(r) {
+    if (!r || !r.ok) { addMessage({ from: 'system', text: 'Micro : reconnaissance impossible (' + ((r && r.error) || 'erreur') + ').' }); return; }
+    const res = (r.results || []).filter((x) => x.text && x.text.replace(/[^\p{L}\p{N}]/gu, '').length > 1);
+    if (!res.length) { addMessage({ from: 'system', text: 'Micro : rien entendu.' }); return; }
+    addMessage({ from: 'system', text: `🎙 Entendu${r.detected ? ' (' + r.detected.toUpperCase() + ')' : ''} : « ${res[0].text} »` });
+    const acts = engine.actions();
+    if (!acts.length) { addMessage({ from: 'system', text: 'Micro : rien à annoncer au contrôleur pour le moment.' }); return; }
+    const auto = S.radioMode === 'auto';
+    const langs = auto ? window.ATC.RADIO_LANGS : [engine.lang];
+    const level = VoiceMatch.parseLevel(res[0].text, (acts.find((a) => a.needsLevel) || {}).options);
+    const cands = [];
+    for (const a of acts) {
+      if (a.id === 'readback') { const m = engine.pending && engine.pending.readback; if (m) cands.push({ id: 'readback', lang: null, text: m.text, speech: m.speech }); continue; }
+      for (const l of langs) {
+        const arg = a.needsLevel ? (level || (a.options && a.options[0])) : undefined;
+        const m = engine.withLang(l, () => engine._pilotMsg(a.id, arg));
+        if (m) cands.push({ id: a.id, lang: auto ? l : null, text: m.text, speech: m.speech, arg, needsLevel: a.needsLevel, options: a.options });
+      }
+    }
+    const cs = engine.cs(), st = engine.station;
+    const best = VoiceMatch.best(res, cands, [cs.text, cs.speech, st ? st.name : '', engine.flight.callsign]);
+    if (!best || best.score < 0.4) { engine.sayAgain(); return; }
+    if (auto && best.lang) engine.setSpeak(best.lang);
+    if (best.needsLevel && !level) { openLevel(best.options); return; }
+    engine.pilotAction(best.id, best.needsLevel ? level : undefined);
+  }
+  setTimeout(() => { if (S.mic) micSetup(); }, 1500);
+  window.__atcSpeech = handleSpeech;
 
   // ---------- Commandes vers le simulateur ----------
   // Réglage automatique de la radio et du transpondeur (avec nouvel essai et méthode de secours)
@@ -475,7 +618,7 @@
       } else await enrich(flight);
       await applyNotams(flight);
       $('log').innerHTML = '';
-      engine.lang = S.lang;
+      engine.uiLang = S.lang; engine.radioMode = S.radioMode;
       demo = isDemo ? new DemoSim(flight) : null;
       engine.load(flight);
       pendingNotes.forEach((t) => addMessage({ from: 'system', text: 'NOTAM — ' + t })); pendingNotes = [];
@@ -515,12 +658,12 @@
   $('btnLoadDemo').onclick = () => startFlight(async () => demoFlight(), true);
 
   $('btnSettings').onclick = () => {
-    $('setLang').value = S.lang; $('setTts').value = S.ttsEngine; $('setFx').value = S.radioFx; fillVoiceSelect(); $('setRate').value = S.rate; $('setVol').value = S.volume;
-    $('setSquelch').checked = S.squelch; $('setPilotVoice').checked = S.pilotVoice; $('setCom').checked = S.requireCom; $('setAutoCom').checked = S.autoCom; $('setAutoXpdr').checked = S.autoXpdr; $('setAutoPush').checked = S.autoPush !== false; $('setTrafficMax').value = String(S.trafficMax || 8); $('setFsltl').checked = S.preferFsltl !== false; $('setAutoRb').checked = S.autoReadback;
+    $('setLang').value = S.radioMode; $('setTts').value = S.ttsEngine; $('setFx').value = S.radioFx; fillVoiceSelect(); $('setRate').value = S.rate; $('setVol').value = S.volume;
+    $('setSquelch').checked = S.squelch; $('setPilotVoice').checked = S.pilotVoice; $('setCom').checked = S.requireCom; $('setAutoCom').checked = S.autoCom; $('setAutoXpdr').checked = S.autoXpdr; $('setAutoPush').checked = S.autoPush !== false; $('setTrafficMax').value = String(S.trafficMax || 8); $('setFsltl').checked = S.preferFsltl !== false; $('setAutoRb').checked = S.autoReadback; $('setMic').checked = !!S.mic; $('setMicKey').value = S.micKey || '';
     $('dlgSettings').classList.remove('hidden');
   };
-  const bindSetting = (id, key, conv) => { $(id).onchange = (e) => { S[key] = conv(e.target); save(); if (key === 'lang') { setTimeout(fillVoiceSelect); engine.lang = S.lang; if (engine.flight) engine.station = engine._st(engine.station.role, engine.station.side); } render(); }; };
-  bindSetting('setLang', 'lang', (e) => e.value);
+  const bindSetting = (id, key, conv) => { $(id).onchange = (e) => { S[key] = conv(e.target); save(); if (key === 'radioMode') { S.lang = S.radioMode === 'en' ? 'en' : 'fr'; save(); setTimeout(fillVoiceSelect); engine.uiLang = S.lang; engine.setRadioMode(S.radioMode); } render(); }; };
+  bindSetting('setLang', 'radioMode', (e) => e.value);
   $('setVoice').onchange = (e) => { if (S.ttsEngine === 'neural') S.neuralVoice = e.target.value; else S.voice = e.target.value; save(); };
   bindSetting('setTts', 'ttsEngine', (e) => { neuralDown = 0; neuralWarned = false; setTimeout(fillVoiceSelect); return e.value; });
   bindSetting('setFx', 'radioFx', (e) => e.value);
@@ -531,6 +674,8 @@
   bindSetting('setCom', 'requireCom', (e) => e.checked);
   bindSetting('setAutoCom', 'autoCom', (e) => { autoTune.tries = 0; autoTune.warned = false; return e.checked; });
   bindSetting('setAutoRb', 'autoReadback', (e) => { $('chkAutoRb').checked = e.checked; return e.checked; });
+  bindSetting('setMic', 'mic', (e) => { setTimeout(micSetup); return e.checked; });
+  bindSetting('setMicKey', 'micKey', (e) => { setTimeout(micSetup); return e.value; });
   $('setTrafficMax').onchange = (e) => { S.trafficMax = +e.target.value; save(); traffic.max = S.trafficMax; };
   $('setFsltl').onchange = (e) => { S.preferFsltl = e.target.checked; save(); traffic.preferFsltl = S.preferFsltl; traffic.models = null; traffic.modelsAt = 0; };
   $('chkAutoRb').checked = S.autoReadback;
@@ -668,6 +813,47 @@
     addMessage({ from: 'system', text: `Pistes en service à ${a.city} en ce moment (${src}) : ${same ? (dep.join(', ') || arr.join(', ')) : `départs ${dep.join(', ') || '—'}, arrivées ${arr.join(', ') || '—'}`}${a.rwy !== before ? ` — votre piste : ${a.rwy}` : ''}.` });
     render();
   }
+  // ---- Trafic réel sans plan de vol : autour de l'aéroport où se trouve le joueur ----
+  let homeBusy = false, homeAt = 0;
+  async function updateHome() {
+    const t = currentTel();
+    if (!S.traffic || engine.flight || !t || t.lat == null || !api || !api.nearestAirport || !api.airportLayout) return;
+    if (t.onGround === false && (t.agl == null || t.agl > 1500)) return; // en vol : trafic en route
+    const h = traffic.home;
+    if (h && utils.distNm(t, h) < 8) return;
+    if (homeBusy || Date.now() - homeAt < 45000) return;
+    homeBusy = true; homeAt = Date.now();
+    try {
+      const list = await api.nearestAirport(t.lat, t.lon);
+      const n = list && list.find((x) => utils.distNm(t, x) < 8);
+      if (!n || engine.flight) return;
+      if (!layouts[n.icao]) { const json = await api.airportLayout(n.icao, n.lat, n.lon); if (json) layouts[n.icao] = Airport.parse(json); }
+      const L = layouts[n.icao]; if (!L || !L.runways || !L.runways.length || !window.MapView) return;
+      const elev = t.onGround && t.alt != null ? Math.round(t.alt - Math.max(0, t.agl || 0)) : 0;
+      const home = { icao: n.icao, city: n.city || n.name || n.icao, name: n.name, lat: n.lat, lon: n.lon, elev };
+      const cands = [];
+      L.runways.forEach((r) => {
+        const p = r.pts[0], q = r.pts[r.pts.length - 1], len = utils.distNm(p, q) * 1852;
+        MapView._rwyEnds(r.ref, p, q).forEach((e, i) => cands.push({ name: e.name, heading: i === 0 ? utils.bearing(p, q) : utils.bearing(q, p), length: len }));
+      });
+      const usable = cands.filter((c) => c.length > 800);
+      let wx = null;
+      try { const m = await api.metar([n.icao]); const x = (m || []).find((y) => y.icaoId === n.icao); if (x) wx = { wdir: x.wdir, wspd: x.wspd }; } catch (_) {}
+      home.rwy = pickRunway(usable.length ? usable : cands, wx);
+      try {
+        const live = api.liveFlights ? await api.liveFlights(n.lat, n.lon) : null;
+        const res = RwyUse.complete(RwyUse.fromLive(L, live, elev, MapView._rwyEnds), L, MapView._rwyEnds);
+        if (res && res.dep && res.dep.length) { home.rwyTakeoff = res.dep[0]; home.rwy = res.dep[0]; }
+        if (res && res.arr && res.arr.length) home.rwyLand = res.arr[0];
+      } catch (_) {}
+      if (!home.rwy || engine.flight) return;
+      traffic.home = home;
+      pushLayout(n.icao);
+      const dep = home.rwyTakeoff || home.rwy, arr = home.rwyLand || home.rwy;
+      addMessage({ from: 'system', text: `Trafic réel sans plan de vol : ${n.name || n.icao} (${n.icao}), ${dep === arr ? `piste ${dep}` : `départs ${dep}, arrivées ${arr}`}. Les vrais avions arrivent dans quelques secondes.` });
+    } catch (_) {} finally { homeBusy = false; }
+  }
+  setInterval(updateHome, 5000);
   // à l'approche de la destination, on revérifie la configuration réelle
   setInterval(() => {
     const f = engine.flight, t = currentTel();
@@ -900,7 +1086,8 @@
   $('btnSquawk').onclick = setSquawk;
   $('btnResume').onclick = () => engine.jumpTo($('selResume').value);
   $('selDemoSpeed').onchange = (e) => { demoSpeed = +e.target.value; };
-  const showAtis = (side) => { const a = engine.atis(side); if (a) addMessage({ from: 'atc', atis: true, station: 'ATIS', freq: engine.flight[side].freqs.ATIS, text: a.text, speech: a.speech }); };
+  // ATIS : en anglais en mode automatique (comme sur la plupart des grands aéroports)
+  const showAtis = (side) => { const L = engine.radioMode === 'auto' ? 'en' : engine.lang; const a = engine.withLang(L, () => engine.atis(side)); if (a) addMessage({ from: 'atc', atis: true, lang: L, station: 'ATIS', freq: engine.flight[side].freqs.ATIS, text: a.text, speech: a.speech }); };
   $('btnAtisDep').onclick = () => showAtis('dep');
   $('btnAtisArr').onclick = () => showAtis('arr');
 

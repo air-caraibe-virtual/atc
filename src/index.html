@@ -105,6 +105,7 @@
         <div id="mapLastAtc" class="map-atc hidden"></div>
       </div>
       <div id="notice" class="notice hidden"></div>
+      <div id="speakBar" class="speak-bar hidden"></div>
       <div id="actions" class="actions"></div>
     </section>
   </main>
@@ -169,8 +170,8 @@
     <div class="dialog">
       <div class="dlg-head"><h3 data-i18n="settings">Paramètres</h3><button class="ghost icon" data-close>✕</button></div>
       <div class="grid2">
-        <label><span data-i18n="language">Langue ATC</span>
-          <select id="setLang"><option value="fr">Français</option><option value="en">English (OACI)</option></select></label>
+        <label><span data-i18n="language">Langue radio</span>
+          <select id="setLang"><option value="auto">Automatique : anglais + langue du pays (réaliste)</option><option value="fr">Toujours en français</option><option value="en">Always English</option></select></label>
         <label><span>Moteur vocal</span>
           <select id="setTts"><option value="neural">Voix naturelles (Internet)</option><option value="system">Voix Windows (hors ligne)</option></select></label>
         <label><span data-i18n="voice">Voix des contrôleurs</span><select id="setVoice"></select></label>
@@ -186,6 +187,9 @@
       <label class="check">Nombre d'avions IA (trafic réel) <select id="setTrafficMax" class="mini-sel" style="margin-left:8px"><option value="4">4</option><option value="8">8</option><option value="12">12</option><option value="16">16</option><option value="24">24</option></select></label>
       <label class="check"><input type="checkbox" id="setFsltl"> <span>Utiliser les avions FSLTL en priorité pour le trafic réel</span></label>
       <label class="check"><input type="checkbox" id="setAutoRb"> <span>Collationner automatiquement les instructions</span></label>
+      <label class="check"><input type="checkbox" id="setMic"> <span>Parler au micro (reconnaissance vocale sur le PC, modèle de 80 Mo téléchargé une fois)</span></label>
+      <label><span>Touche du micro (marche aussi dans MSFS)</span>
+        <select id="setMicKey"><option value="">Aucune (bouton dans ATC)</option><option value="Ctrl+Space">Ctrl + Espace</option><option value="F9">F9</option><option value="F10">F10</option><option value="F11">F11</option><option value="Ctrl+Alt+M">Ctrl + Alt + M</option><option value="Ctrl+Shift+T">Ctrl + Maj + T</option></select></label>
       <label class="check"><input type="checkbox" id="setAutoPush"> <span>Repoussage automatique avec le tracteur de MSFS</span></label>
       <label class="check"><input type="checkbox" id="setAutoXpdr"> <span>Régler le transpondeur automatiquement après la clairance</span></label>
       <label class="check"><input type="checkbox" id="setBeta"> <span>Recevoir les versions bêta (nouveautés en avance, peuvent contenir des bugs)</span></label>
@@ -202,6 +206,7 @@
   <script src="rwyuse.js"></script>
   <script src="traffic.js"></script>
   <script src="map.js"></script>
+  <script src="voicematch.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

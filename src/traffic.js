@@ -71,15 +71,23 @@
 
     // ---------- Contexte : aéroport actif et sa piste ----------
     context(engine, layouts, tel) {
-      const f = engine.flight; if (!f || !tel || tel.lat == null) return null;
-      const pre = ['PRE', 'CLEARED', 'STARTUP', 'TAXI_OUT', 'HOLDING', 'LINEUP', 'TAKEOFF', 'DEP_CHECKIN'].includes(engine.phase);
-      const dDep = distNm(tel, f.dep), dArr = distNm(tel, f.arr);
-      let side = null;
-      if (pre && dDep < 25) side = 'dep';
-      else if (dArr < 80 && !pre) side = 'arr';
-      else if (dDep < 12) side = 'dep';
-      if (!side) return null;
-      const a = f[side], L = layouts[a.icao];
+      const f = engine.flight; if (!tel || tel.lat == null) return null;
+      let side = null, a = null;
+      if (f) {
+        const pre = ['PRE', 'CLEARED', 'STARTUP', 'TAXI_OUT', 'HOLDING', 'LINEUP', 'TAKEOFF', 'DEP_CHECKIN'].includes(engine.phase);
+        const dDep = distNm(tel, f.dep), dArr = distNm(tel, f.arr);
+        if (pre && dDep < 25) side = 'dep';
+        else if (dArr < 80 && !pre) side = 'arr';
+        else if (dDep < 12) side = 'dep';
+        if (!side) return null;
+        a = f[side];
+      } else {
+        // sans plan de vol : l'aéroport où se trouve le joueur (trouvé par l'appli)
+        const h = this.home;
+        if (!h || !h.rwy || distNm(tel, h) > 20) return null;
+        side = 'dep'; a = h;
+      }
+      const L = layouts[a.icao];
       if (!L || !a.rwy) return null;
       const geo = (name) => { const th = Airport.threshold(L, name); return th ? { name, th, end: th.end, hdg: bearing(th, th.end), len: M(th, th.end), strip: th.ref } : null; };
       const P = geo(a.rwy); if (!P) return null;
@@ -95,7 +103,7 @@
       this.now = now; this.engine = engine; this.tel = tel; this.audible = audible;
       const ctx = this.context(engine, layouts, tel);
       // hors des aéroports, en vol : trafic en route (vrais vols autour du joueur)
-      const enroute = !ctx && tel && tel.lat != null && tel.onGround === false && engine.flight;
+      const enroute = !ctx && tel && tel.lat != null && tel.onGround === false && (engine.flight || (tel.agl != null && tel.agl > 1500));
       const key = ctx ? ctx.a.icao + ctx.a.rwy + (ctx.a.rwyTakeoff || '') + (ctx.a.rwyLand || '') : enroute ? 'ENROUTE' : null;
       if (key !== this.side) { this.clear(); this.side = key; this.nextSpawn = now + 8000; this.liveAt = 0; this.live = null; this.conflictCache = {}; }
       if (enroute) { this.ctx = null; return this.enrouteTick(now, dt, tel); }
@@ -651,9 +659,17 @@
     goAround(a) { a.state = 'goaround'; a.light = true; this.radio(a, 'TWR', 'goaround'); }
 
     // ---------- Radio ----------
-    T(fr, en) { return this.engine && this.engine.lang === 'en' ? en : fr; }
+    T(fr, en) { return this.engine ? this.engine.T(fr, en) : fr; }
     radio(a, role, kind, after) {
-      const e = this.engine, c = this.ctx; if (!e || !c) { if (after) after(); return; }
+      const e = this.engine, c = this.ctx; if (!e || !c || !e.flight) { if (after) after(); return; } // sans plan de vol : pas de contrôleur à écouter
+      // chaque avion parle anglais, ou sa langue s'il est chez lui (Iberia en Espagne…)
+      if (!e.withLang || this._inLang) return this._radio(a, role, kind, after);
+      const L = e.aiLang ? e.aiLang(a.cs, c.side) : e.lang;
+      this._inLang = true;
+      try { e.withLang(L, () => this._radio(a, role, kind, after, L)); } finally { this._inLang = false; }
+    }
+    _radio(a, role, kind, after, lang) {
+      const e = this.engine, c = this.ctx;
       const cs = { text: a.cs, speech: callsignSay(a.cs, e.lang) };
       const rn = this.rwyOf(a).name;
       const rw = { text: rn, speech: digits(String(rn).replace(/[LRC]$/, ''), e.lang) + ({ L: e.T(' gauche', ' left'), R: e.T(' droite', ' right'), C: e.T(' centre', ' center') }[String(rn).slice(-1)] || '') };
@@ -664,7 +680,7 @@
       switch (kind) {
         case 'taxi':
           pilot = e.M({ text: st.name, speech: st.name }, ',', cs, ',', e.T('prêt à rouler', 'ready to taxi'));
-          atc = e.M(cs, ',', e.T("roulez point d'arrêt piste", 'taxi to holding point runway'), rw, via ? [',', 'via', via] : null);
+          atc = e.M(cs, ',', e.T("roulez point d'arrêt piste", 'taxi to holding point runway'), rw, via ? [',', e.T('via', 'via'), via] : null);
           break;
         case 'takeoff':
           atc = e.M(cs, ',', W, ',', e.T('piste', 'runway'), rw, ',', e.T('autorisé décollage', 'cleared for take-off'));
@@ -697,7 +713,7 @@
       }
       const pilotFirst = kind === 'taxi';
       const msgs = pilotFirst ? [{ from: 'aipilot', m: pilot }, { from: 'atc', m: atc }] : [{ from: 'atc', m: atc }, { from: 'aipilot', m: pilot }];
-      this.queue.push({ role, side: c.side, station: st, cs: a.cs, msgs, after, at: this.now });
+      this.queue.push({ role, side: c.side, station: st, cs: a.cs, msgs, after, at: this.now, lang: lang || e.lang });
     }
     // Les échanges sont émis l'un après l'autre, sans couper le joueur ni son contrôleur
     flushRadio() {
@@ -711,7 +727,7 @@
       let delay = 0;
       if (audible) {
         q.msgs.forEach((x, i) => {
-          setTimeout(() => this.io.radio({ from: x.from, station: q.station.name, freq: q.station.freq, role: q.role, cs: q.cs, text: x.m.text, speech: x.m.speech }), delay);
+          setTimeout(() => this.io.radio({ from: x.from, station: q.station.name, freq: q.station.freq, role: q.role, cs: q.cs, text: x.m.text, speech: x.m.speech, lang: q.lang }), delay);
           delay += 1800 + x.m.text.length * 55;
         });
       }

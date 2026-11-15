@@ -31,11 +31,183 @@
     EDDF: 'Frankfurt', EDDM: 'München', EHAM: 'Schiphol', EBBR: 'Brussels', LEMD: 'Madrid', LEBL: 'Barcelona', LIRF: 'Roma',
     LIMC: 'Malpensa', LIML: 'Linate', LSGG: 'Genève', LSZH: 'Zürich', OMDB: 'Dubai', CYUL: 'Montréal', CYYZ: 'Toronto',
   };
+  // ---------- Langues radio ----------
+  // Règle OACI : l'anglais partout, plus la langue du pays du contrôleur.
+  const RADIO_LANGS = ['en', 'fr', 'es', 'de', 'it', 'pt'];
+  const LANG_NAMES = { en: 'English', fr: 'Français', es: 'Español', de: 'Deutsch', it: 'Italiano', pt: 'Português' };
+  const QUEBEC = ['CYUL', 'CYQB', 'CYMX', 'CYHU', 'CYBG', 'CYVO', 'CYUY', 'CYRJ', 'CYGP', 'CYZV', 'CYYY', 'CYSC', 'CYBC'];
+  const PREFIX_LANG = [
+    // français
+    ['LSG', 'fr'], ['LF', 'fr'], ['LN', 'fr'], ['EB', 'fr'], ['TF', 'fr'], ['SO', 'fr'], ['FM', 'fr'], ['NT', 'fr'], ['NW', 'fr'], ['NL', 'fr'], ['MT', 'fr'],
+    ['GO', 'fr'], ['DF', 'fr'], ['DR', 'fr'], ['DI', 'fr'], ['DB', 'fr'], ['DX', 'fr'], ['GA', 'fr'], ['GQ', 'fr'], ['GU', 'fr'], ['FC', 'fr'], ['FE', 'fr'],
+    ['FK', 'fr'], ['FO', 'fr'], ['FT', 'fr'], ['FZ', 'fr'], ['DA', 'fr'], ['DT', 'fr'], ['GM', 'fr'], ['FP', 'fr'], ['HD', 'fr'], ['HR', 'fr'],
+    // espagnol
+    ['LE', 'es'], ['GC', 'es'], ['GE', 'es'], ['MM', 'es'], ['MG', 'es'], ['MH', 'es'], ['MN', 'es'], ['MR', 'es'], ['MS', 'es'], ['MD', 'es'], ['MU', 'es'],
+    ['MP', 'es'], ['SK', 'es'], ['SE', 'es'], ['SP', 'es'], ['SL', 'es'], ['SC', 'es'], ['SA', 'es'], ['SU', 'es'], ['SG', 'es'], ['SV', 'es'], ['FG', 'es'],
+    // allemand
+    ['ED', 'de'], ['ET', 'de'], ['LO', 'de'], ['LS', 'de'],
+    // italien
+    ['LI', 'it'],
+    // portugais
+    ['LP', 'pt'], ['SB', 'pt'], ['SD', 'pt'], ['SN', 'pt'], ['SS', 'pt'], ['SW', 'pt'], ['SI', 'pt'], ['SJ', 'pt'], ['FN', 'pt'], ['FQ', 'pt'], ['GV', 'pt'], ['FP', 'pt'],
+  ];
+  function localLang(icao) {
+    const c = String(icao || '').toUpperCase();
+    if (QUEBEC.includes(c)) return 'fr';
+    for (const [p, l] of PREFIX_LANG) if (c.startsWith(p)) return l;
+    return 'en';
+  }
+  // compagnies qui parlent la langue de leur pays chez elles (trafic IA)
+  const AIRLINE_LANG = {
+    AFR: 'fr', TVF: 'fr', CRL: 'fr', FWI: 'fr', HOP: 'fr', ACX: 'fr', FWE: 'fr', ASL: 'fr', SWT: 'fr', AIB: 'fr',
+    IBE: 'es', VLG: 'es', AEA: 'es', IBS: 'es', ANE: 'es', VOE: 'es', IBB: 'es', AMX: 'es', AVA: 'es', LAN: 'es', ARG: 'es',
+    DLH: 'de', EWG: 'de', CFG: 'de', TUI: 'de', AUA: 'de', SWR: 'de', EDW: 'de', CLH: 'de',
+    ITY: 'it', AZA: 'it', NOS: 'it',
+    TAP: 'pt', GLO: 'pt', TAM: 'pt', AZU: 'pt', SAT: 'pt',
+  };
+  // Traductions des phrases (clé = la phrase anglaise) : [espagnol, allemand, italien, portugais]
+  const DICT = {
+    ' slash ': [' barra ', ' Strich ', ' barra ', ' barra '],
+    ' left': [' izquierda', ' links', ' sinistra', ' esquerda'], ' right': [' derecha', ' rechts', ' destra', ' direita'], ' center': [' central', ' Mitte', ' centro', ' central'],
+    'runway': ['pista', 'Piste', 'pista', 'pista'],
+    'closed for works': ['cerrada por obras', 'wegen Bauarbeiten gesperrt', 'chiusa per lavori', 'fechada para obras'],
+    'closed': ['cerrada', 'gesperrt', 'chiusa', 'fechada'],
+    'hold short runway': ['mantenga antes de pista', 'halten Sie vor Piste', 'attendete prima della pista', 'mantenha antes da pista'],
+    'holding short runway': ['manteniendo antes de pista', 'halten vor Piste', 'attendiamo prima della pista', 'mantendo antes da pista'],
+    'Holding short runway': ['Mantenemos antes de pista', 'Halten vor Piste', 'Attendiamo prima della pista', 'Mantendo antes da pista'],
+    'cross runway': ['cruce pista', 'kreuzen Sie Piste', 'attraversate pista', 'cruze a pista'],
+    'Crossing runway': ['Cruzamos pista', 'Kreuzen Piste', 'Attraversiamo pista', 'Cruzando a pista'],
+    'contact': ['contacte', 'rufen Sie', 'contattate', 'contate'],
+    'good day': ['hasta luego', 'auf Wiederhören', 'arrivederci', 'até logo'],
+    'you took off without a clearance, continue and contact Departure.': ['ha despegado sin autorización, continúe y contacte con Salidas.', 'Sie sind ohne Freigabe gestartet, fliegen Sie weiter und rufen Sie Abflug.', 'siete decollati senza autorizzazione, proseguite e contattate Partenze.', 'decolou sem autorização, prossiga e contate Saída.'],
+    'you are not cleared to taxi, hold position.': ['no está autorizado a rodar, mantenga posición.', 'Sie haben keine Rollfreigabe, halten Sie Position.', 'non siete autorizzati al rullaggio, mantenete la posizione.', 'não está autorizado a taxiar, mantenha posição.'],
+    'take-off without clearance noted, continue.': ['despegue sin autorización anotado, continúe.', 'Start ohne Freigabe vermerkt, fliegen Sie weiter.', 'decollo senza autorizzazione annotato, proseguite.', 'decolagem sem autorização registrada, prossiga.'],
+    'check altitude, you are cleared': ['compruebe altitud, está autorizado a', 'prüfen Sie Ihre Höhe, Sie sind freigegeben auf', 'verificate la quota, siete autorizzati a', 'verifique altitude, está autorizado para'],
+    'reduce speed 250 knots or less below flight level 100.': ['reduzca velocidad a 250 nudos o menos por debajo de nivel 100.', 'reduzieren Sie auf 250 Knoten oder weniger unterhalb Flugfläche 100.', 'riducete la velocità a 250 nodi o meno sotto il livello 100.', 'reduza velocidade para 250 nós ou menos abaixo do nível 100.'],
+    'stop immediately, you are on runway': ['pare inmediatamente, está en la pista', 'halten Sie sofort an, Sie sind auf Piste', 'fermatevi immediatamente, siete sulla pista', 'pare imediatamente, está na pista'],
+    'without clearance': ['sin autorización', 'ohne Freigabe', 'senza autorizzazione', 'sem autorização'],
+    'same level': ['mismo nivel', 'gleiche Höhe', 'stesso livello', 'mesmo nível'],
+    'a': ['un', 'ein', 'un', 'um'],
+    'traffic': ['un avión', 'ein Flugzeug', 'un aereo', 'uma aeronave'],
+    'Looking out': ['Buscando el tráfico', 'Halten Ausschau', 'Cerchiamo il traffico', 'Procurando o tráfego'],
+    'cleared for take-off': ['autorizado a despegar', 'Start frei', 'autorizzati al decollo', 'autorizado decolar'],
+    'Cleared for take-off runway': ['Autorizados a despegar pista', 'Start frei Piste', 'Autorizzati al decollo pista', 'Autorizado decolar pista'],
+    'landing without clearance noted.': ['aterrizaje sin autorización anotado.', 'Landung ohne Freigabe vermerkt.', 'atterraggio senza autorizzazione annotato.', 'pouso sem autorização registrado.'],
+    'requested level now available,': ['nivel solicitado ya disponible,', 'angeforderte Höhe jetzt verfügbar,', 'livello richiesto ora disponibile,', 'nível solicitado agora disponível,'],
+    'climb': ['suba', 'steigen Sie', 'salite', 'suba'],
+    'descend': ['descienda', 'sinken Sie', 'scendete', 'desça'],
+    'Climb': ['Subimos', 'Steigen', 'Saliamo', 'Subindo'],
+    'Descend': ['Descendemos', 'Sinken', 'Scendiamo', 'Descendo'],
+    ', when ready': [', a su discreción', ', nach eigenem Ermessen', ', a vostra discrezione', ', a seu critério'],
+    'ILS approach runway': ['aproximación ILS pista', 'ILS-Anflug Piste', 'avvicinamento ILS pista', 'aproximação ILS pista'],
+    'radar contact,': ['contacto radar,', 'Radarkontakt,', 'contatto radar,', 'contato radar,'],
+    'cleared': ['autorizado', 'freigegeben', 'autorizzati', 'autorizado'],
+    'report established': ['notifique establecido', 'melden Sie Landekurs', 'riportate stabilizzati', 'reporte estabilizado'],
+    'Cleared ILS runway': ['Autorizados ILS pista', 'Freigegeben ILS Piste', 'Autorizzati ILS pista', 'Autorizado ILS pista'],
+    'wilco': ['notificaremos establecidos', 'werden melden', 'riporteremo', 'reportaremos'],
+    'continue approach,': ['continúe la aproximación,', 'setzen Sie den Anflug fort,', "continuate l'avvicinamento,", 'continue a aproximação,'],
+    'departing traffic,': ['tráfico saliendo,', 'startender Verkehr,', 'traffico in partenza,', 'tráfego decolando,'],
+    'traffic on the runway,': ['tráfico en la pista,', 'Verkehr auf der Piste,', 'traffico sulla pista,', 'tráfego na pista,'],
+    'Continuing': ['Continuamos', 'Setzen fort', 'Continuiamo', 'Continuando'],
+    'cleared to land': ['autorizado a aterrizar', 'Landung frei', "autorizzati all'atterraggio", 'autorizado pousar'],
+    'Cleared to land runway': ['Autorizados a aterrizar pista', 'Landung frei Piste', "Autorizzati all'atterraggio pista", 'Autorizado pousar pista'],
+    'go around, I say again, go around, climb': ['motor y al aire, repito, motor y al aire, suba', 'durchstarten, ich wiederhole, durchstarten, steigen Sie', 'riattaccate, ripeto, riattaccate, salite', 'arremeta, repito, arremeta, suba'],
+    'Going around, climb': ['Motor y al aire, subimos', 'Starten durch, steigen', 'Riattacchiamo, saliamo', 'Arremetendo, subindo'],
+    'vacate when able, contact': ['abandone la pista cuando pueda, contacte', 'verlassen Sie die Piste wenn möglich, rufen Sie', 'liberate appena possibile, contattate', 'livre a pista quando possível, contate'],
+    'when vacated': ['una vez libre', 'nach Verlassen', 'una volta liberata', 'após livrar'],
+    'Wilco,': ['Recibido,', 'Wilco,', 'Ricevuto,', 'Ciente,'],
+    'request IFR clearance to': ['solicitamos autorización IFR a', 'erbitten IFR-Freigabe nach', 'richiediamo autorizzazione IFR per', 'solicitamos autorização IFR para'],
+    'information': ['información', 'Information', 'informazione', 'informação'],
+    'request push-back and start-up': ['solicitamos remolque y puesta en marcha', 'erbitten Push-back und Anlassen', 'richiediamo push-back e messa in moto', 'solicitamos push-back e acionamento'],
+    'request start-up': ['solicitamos puesta en marcha', 'erbitten Anlassen', 'richiediamo messa in moto', 'solicitamos acionamento'],
+    'ready to taxi': ['listos para rodar', 'rollbereit', 'pronti al rullaggio', 'prontos para taxiar'],
+    'holding point runway': ['en punto de espera pista', 'am Rollhalt Piste', 'al punto attesa pista', 'no ponto de espera pista'],
+    'ready for departure': ['listos para salir', 'abflugbereit', 'pronti per la partenza', 'prontos para decolagem'],
+    'missed approach, climbing': ['aproximación frustrada, subiendo a', 'Fehlanflug, steigen auf', 'mancato avvicinamento, in salita per', 'aproximação perdida, subindo para'],
+    'passing': ['pasando', 'durch', 'passando', 'passando'],
+    'descending': ['descendiendo a', 'sinken auf', 'in discesa per', 'descendo para'],
+    'climbing': ['subiendo a', 'steigen auf', 'in salita per', 'subindo para'],
+    'ready for descent': ['listos para el descenso', 'bereit zum Sinkflug', 'pronti per la discesa', 'prontos para descida'],
+    'request runway status at': ['solicitamos estado de pistas en', 'erbitten Pistenzustand in', 'richiediamo stato delle piste a', 'solicitamos condição das pistas em'],
+    'request': ['solicitamos', 'erbitten', 'richiediamo', 'solicitamos'],
+    'established ILS runway': ['establecidos ILS pista', 'auf dem ILS Piste', 'stabilizzati ILS pista', 'estabilizados ILS pista'],
+    'going around': ['motor y al aire', 'starten durch', 'riattacchiamo', 'arremetendo'],
+    'vacated': ['libre', 'verlassen', 'liberata', 'livre'],
+    'on stand, thanks, good day': ['en el puesto, gracias, hasta luego', 'auf Parkposition, danke, auf Wiederhören', 'al parcheggio, grazie, arrivederci', 'na posição, obrigado, até logo'],
+    'cleared to': ['autorizado a', 'freigegeben nach', 'autorizzati a', 'autorizado para'],
+    'Cleared to': ['Autorizados a', 'Freigegeben nach', 'Autorizzati a', 'Autorizado para'],
+    'as filed': ['según plan de vuelo', 'wie geplant', 'come da piano di volo', 'conforme plano'],
+    'climb initially': ['ascenso inicial', 'steigen Sie initial auf', 'salita iniziale', 'subida inicial'],
+    'squawk': ['transpondedor', 'Squawk', 'squawk', 'transponder'],
+    'via': ['vía', 'über', 'via', 'via'],
+    'readback correct, contact': ['colación correcta, contacte', 'Rücklesung korrekt, rufen Sie', 'collazionamento corretto, contattate', 'cotejamento correto, contate'],
+    'for start-up, good day': ['para puesta en marcha, hasta luego', 'zum Anlassen, auf Wiederhören', 'per la messa in moto, arrivederci', 'para acionamento, até logo'],
+    'readback correct, report ready for start-up': ['colación correcta, notifique listo para puesta en marcha', 'Rücklesung korrekt, melden Sie anlassbereit', 'collazionamento corretto, riportate pronti alla messa in moto', 'cotejamento correto, reporte pronto para acionamento'],
+    'push-back and start-up approved': ['remolque y puesta en marcha aprobados', 'Push-back und Anlassen genehmigt', 'push-back e messa in moto approvati', 'push-back e acionamento aprovados'],
+    'start-up approved': ['puesta en marcha aprobada', 'Anlassen genehmigt', 'messa in moto approvata', 'acionamento aprovado'],
+    'taxi to holding point runway': ['ruede al punto de espera pista', 'rollen Sie zum Rollhalt Piste', 'rullate al punto attesa pista', 'taxie para o ponto de espera pista'],
+    'Taxi to holding point runway': ['Rodamos al punto de espera pista', 'Rollen zum Rollhalt Piste', 'Rulliamo al punto attesa pista', 'Taxiando para o ponto de espera pista'],
+    'traffic on short final,': ['tráfico en final corta,', 'Verkehr im kurzen Endanflug,', 'traffico in corto finale,', 'tráfego em final curta,'],
+    'landing traffic,': ['tráfico aterrizando,', 'landender Verkehr,', 'traffico in atterraggio,', 'tráfego pousando,'],
+    'landing traffic': ['tráfico aterrizando', 'landender Verkehr', 'traffico in atterraggio', 'tráfego pousando'],
+    'departing traffic': ['tráfico saliendo', 'startender Verkehr', 'traffico in partenza', 'tráfego decolando'],
+    'hold position,': ['mantenga posición,', 'halten Sie Position,', 'mantenete la posizione,', 'mantenha posição,'],
+    'Holding position': ['Mantenemos posición', 'Halten Position', 'Manteniamo la posizione', 'Mantendo posição'],
+    'line up and wait runway': ['entre y mantenga pista', 'rollen Sie auf und warten Sie Piste', 'allineatevi e attendete pista', 'alinhe e mantenha pista'],
+    'Line up and wait runway': ['Entramos y mantenemos pista', 'Rollen auf und warten Piste', 'Ci allineiamo e attendiamo pista', 'Alinhando e mantendo pista'],
+    'radar contact, climb': ['contacto radar, suba', 'Radarkontakt, steigen Sie', 'contatto radar, salite', 'contato radar, suba'],
+    'radar contact': ['contacto radar', 'Radarkontakt', 'contatto radar', 'contato radar'],
+    'radar contact, descend': ['contacto radar, descienda', 'Radarkontakt, sinken Sie', 'contatto radar, scendete', 'contato radar, desça'],
+    'expect ILS approach runway': ['espere aproximación ILS pista', 'erwarten Sie ILS-Anflug Piste', 'prevedete avvicinamento ILS pista', 'espere aproximação ILS pista'],
+    'ILS runway': ['ILS pista', 'ILS Piste', 'ILS pista', 'ILS pista'],
+    'runway in use': ['pista en servicio', 'Piste in Betrieb', 'pista in uso', 'pista em uso'],
+    'Runway in use': ['Pista en servicio', 'Piste in Betrieb', 'Pista in uso', 'Pista em uso'],
+    'unable, maintain': ['imposible, mantenga', 'nicht möglich, halten Sie', 'negativo, mantenete', 'impossível, mantenha'],
+    'expect descent shortly': ['espere descenso en breve', 'erwarten Sie Sinkflug in Kürze', 'prevedete la discesa a breve', 'espere descida em breve'],
+    'unable at this time due to traffic, maintain': ['imposible por el momento debido al tráfico, mantenga', 'derzeit wegen Verkehr nicht möglich, halten Sie', 'negativo al momento per traffico, mantenete', 'impossível no momento devido ao tráfego, mantenha'],
+    'expect higher in a few minutes': ['espere más alto en unos minutos', 'erwarten Sie höher in einigen Minuten', 'prevedete livello superiore tra qualche minuto', 'espere nível mais alto em alguns minutos'],
+    'expect lower in a few minutes': ['espere más bajo en unos minutos', 'erwarten Sie tiefer in einigen Minuten', 'prevedete livello inferiore tra qualche minuto', 'espere nível mais baixo em alguns minutos'],
+    'Maintain': ['Mantenemos', 'Halten', 'Manteniamo', 'Mantendo'],
+    'roger, climb': ['recibido, suba', 'verstanden, steigen Sie', 'ricevuto, salite', 'ciente, suba'],
+    'taxi to your stand': ['ruede a su puesto de estacionamiento', 'rollen Sie zu Ihrer Parkposition', 'rullate al vostro parcheggio', 'taxie para sua posição de estacionamento'],
+    'Taxi to stand': ['Rodamos al puesto', 'Rollen zur Parkposition', 'Rulliamo al parcheggio', 'Taxiando para a posição'],
+    'visibility 10 kilometres or more': ['visibilidad 10 kilómetros o más', 'Sicht 10 Kilometer oder mehr', 'visibilità 10 chilometri o più', 'visibilidade 10 quilômetros ou mais'],
+    'few': ['pocas nubes', 'wenige Wolken', 'poche nubi', 'poucas nuvens'],
+    'scattered': ['nubes dispersas', 'aufgelockerte Bewölkung', 'nubi sparse', 'nuvens esparsas'],
+    'broken': ['nubes fragmentadas', 'aufgerissene Bewölkung', 'nubi frammentate', 'nublado'],
+    'overcast': ['cubierto', 'bedeckt', 'coperto', 'encoberto'],
+    'at': ['a', 'in', 'a', 'a'],
+    'feet': ['pies', 'Fuß', 'piedi', 'pés'],
+    'No significant cloud.': ['Sin nubes significativas.', 'Keine signifikante Bewölkung.', 'Nessuna nube significativa.', 'Sem nuvens significativas.'],
+    'Transition level': ['Nivel de transición', 'Übergangsfläche', 'Livello di transizione', 'Nível de transição'],
+    'continue approach, traffic on the runway': ['continúe la aproximación, tráfico en la pista', 'setzen Sie den Anflug fort, Verkehr auf der Piste', "continuate l'avvicinamento, traffico sulla pista", 'continue a aproximação, tráfego na pista'],
+    'go around, I say again, go around': ['motor y al aire, repito, motor y al aire', 'durchstarten, ich wiederhole, durchstarten', 'riattaccate, ripeto, riattaccate', 'arremeta, repito, arremeta'],
+    'Going around': ['Motor y al aire', 'Starten durch', 'Riattacchiamo', 'Arremetendo'],
+    'vacate when able, contact Ground': ['abandone la pista cuando pueda, contacte Rodadura', 'verlassen Sie die Piste wenn möglich, rufen Sie Rollkontrolle', 'liberate appena possibile, contattate Ground', 'livre a pista quando possível, contate Solo'],
+    'Vacating': ['Abandonamos la pista', 'Verlassen die Piste', 'Liberiamo', 'Livrando'],
+  };
+  const DICT_IDX = { es: 0, de: 1, it: 2, pt: 3 };
+  const DIG_X = {
+    es: ['cero', 'uno', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete', 'ocho', 'nueve'],
+    de: ['null', 'eins', 'zwo', 'drei', 'vier', 'fünf', 'sechs', 'sieben', 'acht', 'neun'],
+    it: ['zero', 'uno', 'due', 'tre', 'quattro', 'cinque', 'sei', 'sette', 'otto', 'nove'],
+    pt: ['zero', 'uno', 'dois', 'três', 'quatro', 'cinco', 'meia', 'sete', 'oito', 'nove'],
+  };
+  const DECIMAL = { fr: 'décimal', en: 'decimal', es: 'decimal', de: 'Komma', it: 'virgola', pt: 'decimal' };
+  const SIDE_WORD = { L: { fr: 'gauche', en: 'left', es: 'izquierda', de: 'links', it: 'sinistra', pt: 'esquerda' }, R: { fr: 'droite', en: 'right', es: 'derecha', de: 'rechts', it: 'destra', pt: 'direita' }, C: { fr: 'centre', en: 'center', es: 'central', de: 'Mitte', it: 'centro', pt: 'central' } };
+  const WIND_W = {
+    fr: { na: 'vent non disponible', kt: 'nœuds', calm: 'vent calme', vrb: 'vent variable', g: 'rafales', w: 'vent', deg: 'degrés' },
+    en: { na: 'wind not available', kt: 'knots', calm: 'wind calm', vrb: 'wind variable', g: 'gusting', w: 'wind', deg: 'degrees' },
+    es: { na: 'viento no disponible', kt: 'nudos', calm: 'viento en calma', vrb: 'viento variable', g: 'rachas', w: 'viento', deg: 'grados' },
+    de: { na: 'Wind nicht verfügbar', kt: 'Knoten', calm: 'Wind still', vrb: 'Wind umlaufend', g: 'Böen', w: 'Wind', deg: 'Grad' },
+    it: { na: 'vento non disponibile', kt: 'nodi', calm: 'vento calmo', vrb: 'vento variabile', g: 'raffiche', w: 'vento', deg: 'gradi' },
+    pt: { na: 'vento não disponível', kt: 'nós', calm: 'vento calmo', vrb: 'vento variável', g: 'rajadas', w: 'vento', deg: 'graus' },
+  };
   const letterSay = (c) => (/[A-Z]/.test(c) ? PHON[c.charCodeAt(0) - 65] : c);
   function digits(s, lang) {
     return String(s).split('').map((c) => {
-      if (/\d/.test(c)) return DIG[lang][+c];
-      if (c === '.') return lang === 'fr' ? 'décimal' : 'decimal';
+      if (/\d/.test(c)) return (DIG[lang] || DIG_X[lang] || DIG.en)[+c];
+      if (c === '.') return DECIMAL[lang] || 'decimal';
       if (/[A-Z]/.test(c)) return letterSay(c);
       return c;
     }).filter((x) => x.trim()).join(' ');
@@ -49,14 +221,14 @@
   function rwySay(r, lang) {
     const m = String(r || '').toUpperCase().match(/^(\d{1,2})([LRC]?)$/);
     if (!m) return String(r || '');
-    const side = { L: { fr: 'gauche', en: 'left' }, R: { fr: 'droite', en: 'right' }, C: { fr: 'centre', en: 'center' } }[m[2]];
+    const side = SIDE_WORD[m[2]];
     return digits(m[1].padStart(2, '0'), lang) + (side ? ' ' + side[lang] : '');
   }
   function procSay(p, lang) {
     const m = String(p || '').toUpperCase().match(/^([A-Z]+)(\d)([A-Z]?)$/);
     if (!m) return p;
     const name = m[1].charAt(0) + m[1].slice(1).toLowerCase();
-    return name + ' ' + DIG[lang][+m[2]] + (m[3] ? ' ' + letterSay(m[3]) : '');
+    return name + ' ' + (DIG[lang] || DIG_X[lang] || DIG.en)[+m[2]] + (m[3] ? ' ' + letterSay(m[3]) : '');
   }
   function splitCallsign(cs) {
     const m = String(cs || '').toUpperCase().replace(/\s/g, '').match(/^([A-Z]{3})(\d[0-9A-Z]*)$/);
@@ -107,15 +279,15 @@
     return out;
   }
   function windParts(w, lang) {
-    if (!w || w.wspd == null) return { text: lang === 'fr' ? 'vent non disponible' : 'wind not available', speech: lang === 'fr' ? 'vent non disponible' : 'wind not available' };
-    const kt = lang === 'fr' ? 'nœuds' : 'knots';
-    if (w.wspd < 1) return { text: lang === 'fr' ? 'vent calme' : 'wind calm', speech: lang === 'fr' ? 'vent calme' : 'wind calm' };
-    if (w.wdir === 'VRB' || w.wdir == null) return { text: `${lang === 'fr' ? 'vent variable' : 'wind variable'} ${w.wspd} kt`, speech: `${lang === 'fr' ? 'vent variable' : 'wind variable'}, ${w.wspd} ${kt}` };
+    const W = WIND_W[lang] || WIND_W.en;
+    if (!w || w.wspd == null) return { text: W.na, speech: W.na };
+    if (w.wspd < 1) return { text: W.calm, speech: W.calm };
+    if (w.wdir === 'VRB' || w.wdir == null) return { text: `${W.vrb} ${w.wspd} kt`, speech: `${W.vrb}, ${w.wspd} ${W.kt}` };
     const d = String(Math.round(w.wdir / 10) * 10 % 360 || 360).padStart(3, '0');
-    const g = w.wgst ? (lang === 'fr' ? `, rafales ${w.wgst} ${kt}` : `, gusting ${w.wgst} ${kt}`) : '';
+    const g = w.wgst ? `, ${W.g} ${w.wgst} ${W.kt}` : '';
     return {
-      text: `${lang === 'fr' ? 'vent' : 'wind'} ${d}° ${w.wspd} kt${w.wgst ? ' G' + w.wgst : ''}`,
-      speech: `${lang === 'fr' ? 'vent' : 'wind'} ${digits(d, lang)} ${lang === 'fr' ? 'degrés' : 'degrees'}, ${w.wspd} ${kt}${g}`,
+      text: `${W.w} ${d}° ${w.wspd} kt${w.wgst ? ' G' + w.wgst : ''}`,
+      speech: `${W.w} ${digits(d, lang)} ${W.deg}, ${w.wspd} ${W.kt}${g}`,
     };
   }
   function usesInHg(icao) { return /^[KPC]/.test(icao || '') && !/^PA$/.test(icao); }
@@ -124,6 +296,10 @@
   const ROLE = {
     fr: { DEL: 'Délivrance', GND: 'Sol', TWR: 'Tour', DEP: 'Départ', APP: 'Approche', CTR: 'Contrôle' },
     en: { DEL: 'Delivery', GND: 'Ground', TWR: 'Tower', DEP: 'Departure', APP: 'Approach', CTR: 'Control' },
+    es: { DEL: 'Autorizaciones', GND: 'Rodadura', TWR: 'Torre', DEP: 'Salidas', APP: 'Aproximación', CTR: 'Control' },
+    de: { DEL: 'Delivery', GND: 'Rollkontrolle', TWR: 'Turm', DEP: 'Abflug', APP: 'Anflug', CTR: 'Radar' },
+    it: { DEL: 'Delivery', GND: 'Ground', TWR: 'Torre', DEP: 'Partenze', APP: 'Avvicinamento', CTR: 'Controllo' },
+    pt: { DEL: 'Autorização', GND: 'Solo', TWR: 'Torre', DEP: 'Saída', APP: 'Aproximação', CTR: 'Controle' },
   };
   const PHASE_LABEL = {
     fr: { IDLE: 'Aucun vol', PRE: 'Clairance', CLEARED: 'Autorisé', STARTUP: 'Mise en route', TAXI_OUT: 'Roulage', HOLDING: "Point d'arrêt", LINEUP: 'Alignement', TAKEOFF: 'Décollage', DEP_CHECKIN: 'Départ', CLIMB: 'Montée', CTR_CHECKIN: 'Contrôle', CRUISE: 'Croisière', DESCENT: 'Descente', APP_CHECKIN: 'Approche', APPROACH: 'Approche', FINAL: 'Finale', TWR_CHECKIN: 'Finale', LANDING: 'Atterrissage', VACATING: 'Dégagement', TAXI_IN: 'Roulage arrivée', DONE: 'Terminé' },
@@ -135,7 +311,10 @@
   // ---------- Moteur ----------
   class AtcEngine {
     constructor(opts = {}) {
-      this.lang = opts.lang || 'fr';
+      this.uiLang = opts.uiLang || opts.lang || 'fr';      // langue de l'interface
+      this.radioMode = opts.radioMode || opts.lang || 'fr'; // 'auto' (anglais + langue du pays), 'fr' ou 'en'
+      this.lang = this.radioMode === 'auto' ? 'en' : this.radioMode; // langue parlée en ce moment sur la fréquence
+      this.speak = 'en'; // langue dans laquelle le pilote parle (mode auto)
       this.onMessage = opts.onMessage || (() => {});
       this.onChange = opts.onChange || (() => {});
       this.rand = opts.rand || Math.random;
@@ -153,7 +332,43 @@
       this.onChange();
     }
 
-    T(fr, en) { return this.lang === 'fr' ? fr : en; }
+    // phrase radio dans la langue en cours ; x = { es, de, it, pt } pour les phrases avec variables
+    T(fr, en, x) {
+      const l = this.lang;
+      if (l === 'fr') return fr;
+      if (l === 'en') return en;
+      if (x && x[l] != null) return x[l];
+      const d = DICT[en];
+      return d && d[DICT_IDX[l]] != null ? d[DICT_IDX[l]] : en;
+    }
+    // texte de l'interface (boutons, messages système)
+    U(fr, en) { return this.uiLang === 'en' ? en : fr; }
+    withLang(l, fn) { const p = this.lang; this.lang = l || p; try { return fn(); } finally { this.lang = p; } }
+    // langue du pays d'un poste (règle OACI : anglais + langue locale)
+    stationLang(st) {
+      st = st || this.station; const f = this.flight; if (!st || !f) return 'en';
+      const a = st.side === 'ctr1' ? f.dep : st.side === 'ctr2' ? f.arr : f[st.side];
+      return localLang(a && a.icao);
+    }
+    pilotLang() { return this.radioMode === 'auto' ? (this.speak || 'en') : this.lang; }
+    setLang(l) {
+      if (!l || l === this.lang) return;
+      this.lang = l;
+      if (this.flight && this.station) this.station = this._st(this.station.role, this.station.side);
+      this.onChange();
+    }
+    setRadioMode(mode) {
+      this.radioMode = mode;
+      this.setLang(mode === 'auto' ? (this.speak || 'en') : mode);
+    }
+    setSpeak(l) { this.speak = RADIO_LANGS.includes(l) ? l : 'en'; this.onChange(); }
+    // langue d'un avion IA : sa langue s'il est chez lui, sinon l'anglais
+    aiLang(cs, side) {
+      if (this.radioMode !== 'auto') return this.lang;
+      const loc = this.flight ? localLang(this.flight[side === 'arr' ? 'arr' : 'dep'].icao) : 'en';
+      const p = splitCallsign(cs);
+      return p && AIRLINE_LANG[p.airline] === loc ? loc : 'en';
+    }
 
     // ----- chargement d'un vol -----
     load(fl) {
@@ -180,8 +395,9 @@
       this.target = f.cruise;
       f.appAlt = Math.max(3000, Math.ceil(((f.arr.elev || 0) + 2500) / 1000) * 1000);
       this.phase = 'PRE';
+      if (this.radioMode === 'auto') { this.speak = 'en'; this.lang = 'en'; }
       this.station = f.dep.freqs.DEL ? this._st('DEL', 'dep') : this._st('GND', 'dep');
-      this._sys(this.T(
+      this._sys(this.U(
         `Plan de vol chargé : ${f.callsign} ${f.dep.icao} → ${f.arr.icao}, niveau ${Math.round(f.cruise / 100)}. Contactez ${this.station.name} sur ${freqTxt(this.station.freq)}.`,
         `Flight plan loaded: ${f.callsign} ${f.dep.icao} → ${f.arr.icao}, FL${Math.round(f.cruise / 100)}. Contact ${this.station.name} on ${freqTxt(this.station.freq)}.`));
       this.onChange();
@@ -208,17 +424,20 @@
       const fl = ft >= ref;
       if (fl) {
         const n = String(Math.round(ft / 100)).padStart(3, '0');
-        return { text: this.T(`niveau ${Math.round(ft / 100)}`, `FL${Math.round(ft / 100)}`), speech: this.T(`niveau ${digits(n, 'fr')}`, `flight level ${digits(n, 'en')}`) };
+        const k = Math.round(ft / 100), dn = digits(n, this.lang);
+        return { text: this.T(`niveau ${k}`, `FL${k}`, { es: `nivel ${k}`, de: `Flugfläche ${k}`, it: `livello ${k}`, pt: `nível ${k}` }), speech: this.T(`niveau ${dn}`, `flight level ${dn}`, { es: `nivel ${dn}`, de: `Flugfläche ${dn}`, it: `livello ${dn}`, pt: `nível ${dn}` }) };
       }
       const r = Math.round(ft / 100) * 100;
-      return { text: this.T(`${r} pieds`, `${r} ft`), speech: this.T(`${r} pieds`, `${r} feet`) };
+      const ftx = { es: `${r} pies`, de: `${r} Fuß`, it: `${r} piedi`, pt: `${r} pés` };
+      return { text: this.T(`${r} pieds`, `${r} ft`, ftx), speech: this.T(`${r} pieds`, `${r} feet`, ftx) };
     }
     qnh(side) {
       const a = this.flight[side];
       const q = a.wx && a.wx.qnh ? a.wx.qnh : 1013;
       if (usesInHg(a.icao)) {
         const inhg = (q * 0.02953).toFixed(2);
-        return { text: this.T(`altimètre ${inhg}`, `altimeter ${inhg}`), speech: this.T(`altimètre ${digits(inhg.replace('.', ''), 'fr')}`, `altimeter ${digits(inhg.replace('.', ''), 'en')}`) };
+        const w = this.T('altimètre', 'altimeter', { es: 'altímetro', de: 'Höhenmesser', it: 'altimetro', pt: 'altímetro' });
+        return { text: `${w} ${inhg}`, speech: `${w} ${digits(inhg.replace('.', ''), this.lang)}` };
       }
       return { text: `QNH ${q}`, speech: `QNH ${digits(String(q), this.lang)}` };
     }
@@ -240,11 +459,12 @@
       if (c.until) {
         const d = new Date(c.until), now = new Date();
         const hhmm = String(d.getUTCHours()).padStart(2, '0') + String(d.getUTCMinutes()).padStart(2, '0');
-        if (d - now < 20 * 3600000) until = { text: this.T(`jusqu'à ${hhmm} UTC`, `until ${hhmm} UTC`), speech: this.T(`jusqu'à ${digits(hhmm, 'fr')} UTC`, `until ${digits(hhmm, 'en')} UTC`) };
+        const U2 = (h) => this.T(`jusqu'à ${h} UTC`, `until ${h} UTC`, { es: `hasta las ${h} UTC`, de: `bis ${h} UTC`, it: `fino alle ${h} UTC`, pt: `até ${h} UTC` });
+        if (d - now < 20 * 3600000) until = { text: U2(hhmm), speech: U2(digits(hhmm, this.lang)) };
         else {
           const day = d.getUTCDate(), mo = d.getUTCMonth();
           const MO = { fr: ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'], en: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'] };
-          const t = this.T(`jusqu'au ${day} ${MO.fr[mo]}`, `until ${MO.en[mo]} ${day}`);
+          const t = this.T(`jusqu'au ${day} ${MO.fr[mo]}`, `until ${MO.en[mo]} ${day}`, { es: `hasta el ${day}/${mo + 1}`, de: `bis zum ${day}.${mo + 1}.`, it: `fino al ${day}/${mo + 1}`, pt: `até ${day}/${mo + 1}` });
           until = { text: t, speech: t };
         }
       }
@@ -254,7 +474,8 @@
       const fr = ['au nord', 'au nord-est', "à l'est", 'au sud-est', 'au sud', 'au sud-ouest', "à l'ouest", 'au nord-ouest'];
       const en = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'];
       const i = Math.round((((h % 360) + 360) % 360) / 45) % 8;
-      const t = this.T('face ' + fr[i], 'facing ' + en[i]);
+      const X = { es: ['norte', 'noreste', 'este', 'sureste', 'sur', 'suroeste', 'oeste', 'noroeste'], de: ['Norden', 'Nordosten', 'Osten', 'Südosten', 'Süden', 'Südwesten', 'Westen', 'Nordwesten'], it: ['nord', 'nord-est', 'est', 'sud-est', 'sud', 'sud-ovest', 'ovest', 'nord-ovest'], pt: ['norte', 'nordeste', 'leste', 'sudeste', 'sul', 'sudoeste', 'oeste', 'noroeste'] };
+      const t = this.T('face ' + fr[i], 'facing ' + en[i], { es: 'cara al ' + X.es[i], de: 'Nase nach ' + X.de[i], it: 'prua a ' + X.it[i], pt: 'de frente para ' + X.pt[i] });
       return { text: t, speech: t };
     }
     // ---- Traversées de piste au roulage ----
@@ -274,7 +495,7 @@
       if ((this.crossOK || new Set()).has(ref) || this.flags.crossWait === ref) return null;
       return g.ahead.dist < 250 ? ref : null;
     }
-    crossLabel() { const c = this.crossAhead(); return this.T(`Avant la piste ${c}`, `Holding short ${c}`); }
+    crossLabel() { const c = this.crossAhead(); return this.U(`Avant la piste ${c}`, `Holding short ${c}`); }
     _crossClear(ref) {
       const f = this.flight, cs = this.cs();
       this.crossOK = this.crossOK || new Set();
@@ -306,7 +527,7 @@
     _sys(text) { this.onMessage({ from: 'system', text, speech: text, at: this.now }); }
     // « bonjour » au premier échange avec chaque poste (comme à la radio en France)
     _greet(msg, who) {
-      if (this.lang !== 'fr' || !this.station || /bonjour|arrêtez immédiatement|remettez les gaz|sans autorisation/i.test(msg.text)) return msg;
+      if ((msg.lang || this.lang) !== 'fr' || !this.station || /bonjour|arrêtez immédiatement|remettez les gaz|sans autorisation/i.test(msg.text)) return msg;
       this.greeted = this.greeted || {};
       const key = who + ':' + this.station.name;
       if (this.greeted[key]) return msg;
@@ -324,9 +545,10 @@
       const t = ins(msg.text, anchorT), s = ins(msg.speech, anchorS);
       return t && s ? { ...msg, text: t, speech: s } : msg;
     }
-    _pilot(msg) { msg = this._greet(msg, 'pilot'); this.onMessage({ from: 'pilot', station: this.station && this.station.name, ...msg, at: this.now }); }
+    _pilot(msg) { msg = { lang: this.lang, ...msg }; msg = this._greet(msg, 'pilot'); this.onMessage({ from: 'pilot', station: this.station && this.station.name, ...msg, at: this.now }); }
     _atc(msg, after, delay) {
       this.busy = true;
+      msg = { lang: this.lang, ...msg };
       const st = this.station;
       const d = delay != null ? delay : this.delay[0] + this.rand() * (this.delay[1] - this.delay[0]);
       this._at(d, () => {
@@ -346,6 +568,11 @@
       const msg = this.M(this.cs(), ',', extra ? [extra, ','] : null, this.T('contactez', 'contact'), { text: st.name, speech: st.name }, this.fq(st.freq), ',', this.T('au revoir', 'good day'));
       const rb = this.M(this.fq(st.freq), ',', this.T('au revoir', 'good day'), ',', this.cs());
       this._instruct(msg, rb, () => { this.station = st; if (after) after(); this.onChange(); });
+    }
+    // « répétez » quand le message n'a pas été compris (micro)
+    sayAgain() {
+      if (!this.flight || this.busy) return;
+      this._atc(this.M(this.cs(), ',', this.T('répétez', 'say again', { es: 'repita', de: 'wiederholen Sie', it: 'ripetete', pt: 'repita' })));
     }
     _setCleared(ft) {
       const cur = this.curAlt();
@@ -437,11 +664,13 @@
         const ti = this.traffic.trafficInfo(t);
         if (ti) {
           this.lastTfc = this.now;
-          const lvl = ti.dz === 0 ? this.T('même niveau', 'same level') : this.T(`${Math.abs(ti.dz)} pieds ${ti.dz > 0 ? 'au-dessus' : 'au-dessous'}`, `${Math.abs(ti.dz)} feet ${ti.dz > 0 ? 'above' : 'below'}`);
-          const clk = { text: this.T(`${ti.clock} heures`, `${ti.clock} o'clock`), speech: this.T(`${ti.clock === 1 ? 'une heure' : ti.clock + ' heures'}`, `${ti.clock} o'clock`) };
-          const nm = this.T(`${ti.nm} nautique${ti.nm > 1 ? 's' : ''}`, `${ti.nm} mile${ti.nm > 1 ? 's' : ''}`);
+          const dz = Math.abs(ti.dz), up = ti.dz > 0, pl = ti.nm > 1;
+          const lvl = ti.dz === 0 ? this.T('même niveau', 'same level') : this.T(`${dz} pieds ${up ? 'au-dessus' : 'au-dessous'}`, `${dz} feet ${up ? 'above' : 'below'}`, { es: `${dz} pies ${up ? 'por encima' : 'por debajo'}`, de: `${dz} Fuß ${up ? 'höher' : 'tiefer'}`, it: `${dz} piedi ${up ? 'sopra' : 'sotto'}`, pt: `${dz} pés ${up ? 'acima' : 'abaixo'}` });
+          const ck = { es: `${ti.clock}`, de: `${ti.clock} Uhr`, it: `${ti.clock}`, pt: `${ti.clock} horas` };
+          const clk = { text: this.T(`${ti.clock} heures`, `${ti.clock} o'clock`, ck), speech: this.T(`${ti.clock === 1 ? 'une heure' : ti.clock + ' heures'}`, `${ti.clock} o'clock`, ck) };
+          const nm = this.T(`${ti.nm} nautique${pl ? 's' : ''}`, `${ti.nm} mile${pl ? 's' : ''}`, { es: `${ti.nm} milla${pl ? 's' : ''}`, de: `${ti.nm} Meile${pl ? 'n' : ''}`, it: `${ti.nm} migli${pl ? 'a' : 'o'}`, pt: `${ti.nm} milha${pl ? 's' : ''}` });
           const type = ti.type ? { text: ti.type, speech: ti.type.replace(/^A(\d)/, 'A $1') } : null;
-          const m = this.M(cs, ',', this.T('trafic à', 'traffic'), clk, ',', nm, ',', lvl, type ? [',', this.T('un', 'a'), type] : null);
+          const m = this.M(cs, ',', this.T('trafic à', 'traffic', { es: 'tráfico a las', de: 'Verkehr auf', it: 'traffico a ore', pt: 'tráfego às' }), clk, ',', nm, ',', lvl, type ? [',', this.T('un', 'a'), type] : null);
           const rb = this.M(this.T('Recherchons le trafic', 'Looking out'), ',', cs);
           return this._instruct(m, rb, null);
         }
@@ -541,7 +770,8 @@
     _levelClearance(lvl, reason, step) {
       const f = this.flight, up = lvl > (this.curAlt() || this.target);
       const alt = this.alt(lvl, f.dep.ta);
-      const pre = reason === 'step' ? this.T(`pour votre palier${step && step.fix ? ' à ' + step.fix : ''},`, `for your step climb${step && step.fix ? ' at ' + step.fix : ''},`)
+      const fx = step && step.fix;
+      const pre = reason === 'step' ? this.T(`pour votre palier${fx ? ' à ' + fx : ''},`, `for your step climb${fx ? ' at ' + fx : ''},`, { es: `para su ascenso escalonado${fx ? ' en ' + fx : ''},`, de: `für Ihre Stufe${fx ? ' bei ' + fx : ''},`, it: `per il vostro cambio di livello${fx ? ' a ' + fx : ''},`, pt: `para sua mudança de nível${fx ? ' em ' + fx : ''},` })
         : reason === 'offer' ? this.T('niveau demandé maintenant disponible,', 'requested level now available,') : null;
       const msg = this.M(this.cs(), ',', pre, up ? this.T('montez', 'climb') : this.T('descendez', 'descend'), alt);
       const rb = this.M(up ? this.T('Montons', 'Climb') : this.T('Descendons', 'Descend'), alt, ',', this.cs());
@@ -603,10 +833,10 @@
     actions() {
       if (!this.flight || this.phase === 'IDLE') return [];
       if (this.busy) return [];
-      if (this.pending) return [{ id: 'readback', label: this.T('Collationner', 'Read back'), preview: this.pending.readback.text, primary: true }];
-      const L = (fr, en) => this.T(fr, en);
+      if (this.pending) return [{ id: 'readback', label: this.U('Collationner', 'Read back'), preview: this.pending.readback.text, primary: true }];
+      const L = (fr, en) => this.U(fr, en);
       const list = [];
-      const add = (id, label, primary) => { const m = this._pilotMsg(id); if (m) list.push({ id, label, preview: m.text, primary: !!primary }); };
+      const add = (id, label, primary) => { const m = this.withLang(this.pilotLang(), () => this._pilotMsg(id)); if (m) list.push({ id, label, preview: m.text, primary: !!primary }); };
       switch (this.phase) {
         case 'PRE': add('req_clearance', L('Demander la clairance', 'Request clearance'), true); break;
         case 'CLEARED': add('req_push', L('Repoussage + mise en route', 'Push-back + start-up'), true); add('req_start', L('Mise en route seule', 'Start-up only')); break;
@@ -635,7 +865,9 @@
     }
 
     _pilotMsg(id, arg) {
-      const f = this.flight, cs = this.cs(), st = this.station ? { text: this.station.name, speech: this.station.name } : '';
+      const f = this.flight, cs = this.cs();
+      const stName = this.station ? this._st(this.station.role, this.station.side).name : null;
+      const st = stName ? { text: stName, speech: stName } : '';
       const a = this.curAlt();
       switch (id) {
         case 'readback': return this.pending && this.pending.readback;
@@ -673,6 +905,19 @@
 
     pilotAction(id, arg) {
       if (!this.flight || this.busy) return;
+      // Règle OACI (mode auto) : le contrôleur comprend l'anglais et la langue de son pays.
+      if (this.radioMode === 'auto' && id !== 'readback') {
+        const P = this.speak || 'en', loc = this.stationLang();
+        if (P !== 'en' && P !== loc) {
+          const said = this.withLang(P, () => this._pilotMsg(id, arg));
+          if (!said) return;
+          this.withLang(P, () => this._pilot(said));
+          this.withLang('en', () => this._atc(this.M(this.cs(), ',', 'I do not understand, say again in English.')));
+          this.onChange();
+          return;
+        }
+        this.setLang(P);
+      }
       const msg = this._pilotMsg(id, arg);
       if (!msg) return;
       this._pilot(msg);
@@ -684,10 +929,10 @@
           const dest = { text: f.arr.city, speech: f.arr.city };
           const chg = f.dep.rwyChange && f.dep.rwyChange.to ? [this.closureMsg({ rwys: [f.dep.rwyChange.from], until: f.dep.rwyChange.until, works: f.dep.rwyChange.works }), ','] : null;
           const msg2 = this.M(cs, ',', chg, this.T('autorisé', 'cleared to'), dest,
-            sid ? [this.T(', départ', 'via'), sid, this.T('', 'departure')] : this.T(', comme déposé', 'as filed'), ',',
+            sid ? [this.T(', départ', 'via', { es: ', salida', de: ',', it: ', partenza', pt: ', saída' }), sid, this.T('', 'departure', { es: '', de: 'Abflug', it: '', pt: '' })] : this.T(', comme déposé', 'as filed'), ',',
             this.T('piste', 'runway'), this.rwy('dep'), ',', this.T('montée initiale', 'climb initially'), this.alt(f.initAlt, f.dep.ta), ',',
             this.T('transpondeur', 'squawk'), { text: f.squawk, speech: digits(f.squawk, this.lang) });
-          const rb = this.M(this.T('Autorisé', 'Cleared to'), dest, sid ? [this.T(', départ', 'via'), sid, this.T('', 'departure')] : this.T(', comme déposé', 'as filed'), ',', this.T('piste', 'runway'), this.rwy('dep'), ',',
+          const rb = this.M(this.T('Autorisé', 'Cleared to'), dest, sid ? [this.T(', départ', 'via', { es: ', salida', de: ',', it: ', partenza', pt: ', saída' }), sid, this.T('', 'departure', { es: '', de: 'Abflug', it: '', pt: '' })] : this.T(', comme déposé', 'as filed'), ',', this.T('piste', 'runway'), this.rwy('dep'), ',',
             this.T('montée initiale', 'climb initially'), this.alt(f.initAlt, f.dep.ta), ',', this.T('transpondeur', 'squawk'), { text: f.squawk, speech: digits(f.squawk, this.lang) }, ',', cs);
           this._instruct(msg2, rb, () => {
             this._setCleared(f.initAlt);
@@ -787,10 +1032,11 @@
           const side = this.notamSide(), a = f[side];
           const cl = (a.closures || []).filter((c) => !c.partial);
           const parts = [cs, ','];
-          if (!a.notamOk) parts.push(this.T(`pas d'information NOTAM disponible pour ${a.city}`, `no NOTAM information available for ${a.city}`));
-          else if (!cl.length) parts.push(this.T(`aucune fermeture de piste signalée à ${a.city}`, `no runway closures reported at ${a.city}`));
+          const c = a.city;
+          if (!a.notamOk) parts.push(this.T(`pas d'information NOTAM disponible pour ${c}`, `no NOTAM information available for ${c}`, { es: `no hay información NOTAM disponible para ${c}`, de: `keine NOTAM-Information für ${c} verfügbar`, it: `nessuna informazione NOTAM disponibile per ${c}`, pt: `nenhuma informação NOTAM disponível para ${c}` }));
+          else if (!cl.length) parts.push(this.T(`aucune fermeture de piste signalée à ${c}`, `no runway closures reported at ${c}`, { es: `no se notifican cierres de pista en ${c}`, de: `keine Pistensperrungen in ${c} gemeldet`, it: `nessuna chiusura pista segnalata a ${c}`, pt: `nenhum fechamento de pista reportado em ${c}` }));
           else {
-            parts.push(this.T(`à ${a.city},`, `at ${a.city},`));
+            parts.push(this.T(`à ${c},`, `at ${c},`, { es: `en ${c},`, de: `in ${c},`, it: `a ${c},`, pt: `em ${c},` }));
             cl.forEach((c, i) => { parts.push(this.closureMsg(c)); parts.push(i < cl.length - 1 ? ',' : ''); });
           }
           parts.push(',', this.T('piste en service', 'runway in use'), this.rwy(side));
@@ -805,7 +1051,7 @@
             if (near) {
               this._atc(this.M(cs, ',', this.T('impossible, maintenez', 'unable, maintain'), keep, ',', this.T('prévoyez la descente sous peu', 'expect descent shortly')));
             } else {
-              const m = this.M(cs, ',', this.T('impossible pour le moment en raison du trafic, maintenez', 'unable at this time due to traffic, maintain'), keep, ',', this.T('je vous rappelle', 'expect higher in a few minutes').replace('higher', lvl > this.target ? 'higher' : 'lower'));
+              const m = this.M(cs, ',', this.T('impossible pour le moment en raison du trafic, maintenez', 'unable at this time due to traffic, maintain'), keep, ',', (lvl > this.target ? this.T('je vous rappelle', 'expect higher in a few minutes') : this.T('je vous rappelle', 'expect lower in a few minutes')));
               const rb = this.M(this.T('Maintenons', 'Maintain'), keep, ',', cs);
               this._instruct(m, rb, () => { this.offer = { alt: lvl, at: this.now + 120000 + this.rand() * 120000 }; });
             }
@@ -830,7 +1076,7 @@
         case 'on_stand':
           this._atc(this.M(cs, ',', this.T('bonne journée, au revoir', 'good day')), () => {
             this.phase = 'DONE';
-            this._sys(this.T('Vol terminé. Bon retour au parking !', 'Flight complete. Welcome to the stand!'));
+            this._sys(this.U('Vol terminé. Bon retour au parking !', 'Flight complete. Welcome to the stand!'));
           });
           break;
       }
@@ -853,7 +1099,7 @@
         case 'VACATING': set('GND', 'arr'); break;
       }
       this.phase = phase;
-      this._sys(this.T(`Reprise : ${PHASE_LABEL.fr[phase]}. Contactez ${this.station.name} sur ${freqTxt(this.station.freq)}.`, `Resuming: ${PHASE_LABEL.en[phase]}. Contact ${this.station.name} on ${freqTxt(this.station.freq)}.`));
+      this._sys(this.U(`Reprise : ${PHASE_LABEL.fr[phase]}. Contactez ${this.station.name} sur ${freqTxt(this.station.freq)}.`, `Resuming: ${PHASE_LABEL.en[phase]}. Contact ${this.station.name} on ${freqTxt(this.station.freq)}.`));
       this.onChange();
     }
 
@@ -862,14 +1108,14 @@
       const f = this.flight; if (!f) return null;
       const a = f[side], w = a.wx || {}, fr = this.lang === 'fr', L = this.atisLetter(side);
       const parts = [];
-      parts.push(this.T(`Ici ${a.city}, information ${L}.`, `This is ${a.city} information ${L}.`));
+      parts.push(this.T(`Ici ${a.city}, information ${L}.`, `This is ${a.city} information ${L}.`, { es: `Aquí ${a.city}, información ${L}.`, de: `Hier ist ${a.city} Information ${L}.`, it: `Questo è ${a.city} informazione ${L}.`, pt: `Aqui ${a.city}, informação ${L}.` }));
       parts.push(this.M(this.T('Piste en service', 'Runway in use'), this.rwy(side), '.'));
       (a.closures || []).filter((c) => !c.partial).forEach((c) => parts.push(this.M(this.closureMsg(c), '.')));
       parts.push(this.M(this.wind(side), '.'));
       let vis;
       if (w.cavok) vis = 'CAVOK';
-      else if (w.vis && w.vis.m != null) vis = w.vis.m >= 9999 ? this.T('visibilité 10 kilomètres ou plus', 'visibility 10 kilometres or more') : this.T(`visibilité ${w.vis.m} mètres`, `visibility ${w.vis.m} metres`);
-      else if (w.vis && w.vis.sm != null) vis = this.T(`visibilité ${w.vis.sm} miles`, `visibility ${w.vis.sm} miles`);
+      else if (w.vis && w.vis.m != null) vis = w.vis.m >= 9999 ? this.T('visibilité 10 kilomètres ou plus', 'visibility 10 kilometres or more') : this.T(`visibilité ${w.vis.m} mètres`, `visibility ${w.vis.m} metres`, { es: `visibilidad ${w.vis.m} metros`, de: `Sicht ${w.vis.m} Meter`, it: `visibilità ${w.vis.m} metri`, pt: `visibilidade ${w.vis.m} metros` });
+      else if (w.vis && w.vis.sm != null) vis = this.T(`visibilité ${w.vis.sm} miles`, `visibility ${w.vis.sm} miles`, { es: `visibilidad ${w.vis.sm} millas`, de: `Sicht ${w.vis.sm} Meilen`, it: `visibilità ${w.vis.sm} miglia`, pt: `visibilidade ${w.vis.sm} milhas` });
       if (vis) parts.push(vis + '.');
       if (!w.cavok) {
         if (w.clouds && w.clouds.length) {
@@ -877,19 +1123,19 @@
           parts.push(w.clouds.map((c) => `${C[c.cover]} ${this.T('à', 'at')} ${c.base} ${this.T('pieds', 'feet')}`).join(', ') + '.');
         } else if (w.nsc) parts.push(this.T('Pas de nuages significatifs.', 'No significant cloud.'));
       }
-      if (w.temp != null) parts.push(this.T(`Température ${Math.round(w.temp)}, point de rosée ${Math.round(w.dew)}.`, `Temperature ${Math.round(w.temp)}, dew point ${Math.round(w.dew)}.`));
+      if (w.temp != null) parts.push(this.T(`Température ${Math.round(w.temp)}, point de rosée ${Math.round(w.dew)}.`, `Temperature ${Math.round(w.temp)}, dew point ${Math.round(w.dew)}.`, { es: `Temperatura ${Math.round(w.temp)}, punto de rocío ${Math.round(w.dew)}.`, de: `Temperatur ${Math.round(w.temp)}, Taupunkt ${Math.round(w.dew)}.`, it: `Temperatura ${Math.round(w.temp)}, punto di rugiada ${Math.round(w.dew)}.`, pt: `Temperatura ${Math.round(w.temp)}, ponto de orvalho ${Math.round(w.dew)}.` }));
       parts.push(this.M(this.qnh(side), '.'));
       const tl = String(Math.round(a.tl / 100)).padStart(2, '0');
       parts.push(this.M(this.T('Niveau de transition', 'Transition level'), { text: tl, speech: digits(tl, this.lang) }, '.'));
-      parts.push(this.T(`Accusez réception de l'information ${L} au premier contact.`, `Advise on initial contact you have information ${L}.`));
+      parts.push(this.T(`Accusez réception de l'information ${L} au premier contact.`, `Advise on initial contact you have information ${L}.`, { es: `Notifique en el contacto inicial que tiene la información ${L}.`, de: `Bestätigen Sie beim Erstanruf Information ${L}.`, it: `Riportate al primo contatto di avere l'informazione ${L}.`, pt: `Informe no contato inicial que possui a informação ${L}.` }));
       const cap = (p) => (typeof p === 'string' ? p.charAt(0).toUpperCase() + p.slice(1) : { text: cap(p.text), speech: cap(p.speech) });
       const msg = this.M(...parts.map(cap));
       msg.letter = L;
       return msg;
     }
 
-    phaseLabel() { return PHASE_LABEL[this.lang][this.phase] || this.phase; }
+    phaseLabel() { return PHASE_LABEL[this.uiLang === 'en' ? 'en' : 'fr'][this.phase] || this.phase; }
   }
 
-  return { AtcEngine, utils: { distNm, bearing, digits, freqTxt, freqSay, callsignSay, fakeFreq, parseMetar, titleCase, hash, usesInHg }, PHASE_LABEL, RESUME_POINTS, AIRBORNE };
+  return { AtcEngine, RADIO_LANGS, LANG_NAMES, localLang, utils: { rwySay, distNm, bearing, digits, freqTxt, freqSay, callsignSay, fakeFreq, parseMetar, titleCase, hash, usesInHg }, PHASE_LABEL, RESUME_POINTS, AIRBORNE };
 });
