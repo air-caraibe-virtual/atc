@@ -951,7 +951,8 @@
   let tLast = performance.now();
   setInterval(() => {
     const now = performance.now(), dt = Math.min(0.5, (now - tLast) / 1000); tLast = now;
-    if (!engine.flight) return;
+    // avec un plan de vol, ou sans plan de vol autour de l'aéroport où se trouve le joueur
+    if (!engine.flight && !traffic.home && !(traffic.ai && traffic.ai.length)) return;
     traffic.tick(Date.now(), dt, engine, layouts, currentTel(), audible);
     if (window.MapView && MapView.map) MapView.setTraffic(traffic.list());
   }, 100);

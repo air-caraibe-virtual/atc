@@ -100,6 +100,7 @@
     // ---------- Boucle (≈10 fois par seconde) ----------
     tick(now, dt, engine, layouts, tel, audible) {
       if (!this.enabled) return;
+      if (!tel || tel.lat == null) return; // pas de données du simulateur pour l'instant : on ne vide rien
       this.now = now; this.engine = engine; this.tel = tel; this.audible = audible;
       const ctx = this.context(engine, layouts, tel);
       // hors des aéroports, en vol : trafic en route (vrais vols autour du joueur)
