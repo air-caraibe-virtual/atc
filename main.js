@@ -763,6 +763,30 @@ ipcMain.handle('ai-chat', async (_e, o) => {
     try { return { ok: true, text: await require('./llm.js').chat(llmDir(), system, messages, maxTokens, (p) => send('ai-progress', p)) }; }
     catch (e) { return { ok: false, error: 'IA intégrée : ' + String(e.message || e) }; }
   }
+  // IA en ligne gratuite sans clé : services publics gratuits (sans garantie, limités en nombre de messages)
+  if (provider === 'free') {
+    const errs = [];
+    // 1) LLM7 (compatible OpenAI, accès sans compte)
+    try {
+      const r = await net.fetch('https://api.llm7.io/v1/chat/completions', {
+        method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer unused' },
+        body: JSON.stringify({ model: 'default', temperature: 0.2, max_tokens: maxTokens || 400, messages: [{ role: 'system', content: system }, ...messages] }),
+      });
+      const j = await r.json().catch(() => ({}));
+      const t = j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content;
+      if (r.ok && t) return { ok: true, text: t };
+      errs.push('LLM7 ' + r.status);
+    } catch (e) { errs.push('LLM7 ' + (e.message || e)); }
+    // 2) Pollinations (texte simple)
+    try {
+      const prompt = messages.map((m) => m.content).join('\n\n');
+      const r = await net.fetch('https://text.pollinations.ai/' + encodeURIComponent(prompt) + '?model=openai&json=true&system=' + encodeURIComponent(system));
+      const t = await r.text();
+      if (r.ok && t && t.includes('{')) return { ok: true, text: t };
+      errs.push('Pollinations ' + r.status);
+    } catch (e) { errs.push('Pollinations ' + (e.message || e)); }
+    return { ok: false, error: 'IA gratuite en ligne indisponible pour le moment (' + errs.join(', ') + ')' };
+  }
   if (provider === 'ollama') {
     try {
       const r = await net.fetch('http://127.0.0.1:11434/api/chat', {

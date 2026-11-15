@@ -506,8 +506,9 @@
     const noKey = !!(p && p.noKey);
     document.querySelectorAll('.ai-key-only').forEach((el) => el.classList.toggle('hidden', noKey));
     if ($('aiLocalBox')) $('aiLocalBox').classList.toggle('hidden', S.aiProvider !== 'local');
+    if ($('aiFreeBox')) $('aiFreeBox').classList.toggle('hidden', S.aiProvider !== 'free');
     if ($('aiOllamaBox')) $('aiOllamaBox').classList.toggle('hidden', S.aiProvider !== 'ollama');
-    if ($('setAiModelRow')) $('setAiModelRow').classList.toggle('hidden', S.aiProvider === 'local');
+    if ($('setAiModelRow')) $('setAiModelRow').classList.toggle('hidden', S.aiProvider === 'local' || S.aiProvider === 'free');
     $('freeBar') && $('freeBar').classList.toggle('hidden', !aiOn() && !engine.flight);
   }
   async function aiAsk(system, messages, maxTokens) {

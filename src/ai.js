@@ -7,6 +7,7 @@
   'use strict';
 
   const PROVIDERS = {
+    free: { name: 'IA en ligne gratuite (sans clé)', model: '', keyHint: '', noKey: true, compact: true },
     local: { name: 'IA intégrée (gratuite, sur le PC)', model: '', keyHint: '', noKey: true, compact: true },
     ollama: { name: 'Ollama (gros PC)', model: 'qwen2.5:7b', keyHint: '', noKey: true },
     anthropic: { name: 'Claude (Anthropic)', model: 'claude-haiku-5-5', keyHint: 'sk-ant-…' },
