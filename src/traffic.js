@@ -115,25 +115,33 @@
     // ---------- Contexte : aéroport actif et sa piste ----------
     context(engine, layouts, tel) {
       const f = engine.flight; if (!tel || tel.lat == null) return null;
-      let side = null, a = null;
+      let ctx = null;
       if (f) {
         const pre = ['PRE', 'CLEARED', 'STARTUP', 'TAXI_OUT', 'HOLDING', 'LINEUP', 'TAKEOFF', 'DEP_CHECKIN'].includes(engine.phase);
         const dDep = distNm(tel, f.dep), dArr = distNm(tel, f.arr);
+        let side = null;
         if (pre && dDep < 25) side = 'dep';
         else if (dArr < 80 && !pre) side = 'arr';
         else if (dDep < 12) side = 'dep';
-        if (!side) return null;
-        a = f[side];
-      } else {
-        // sans plan de vol : l'aéroport où se trouve le joueur (trouvé par l'appli)
-        const h = this.home;
-        if (!h || !h.rwy || distNm(tel, h) > 20) return null;
-        side = 'dep'; a = h;
+        if (side) ctx = this.buildCtx(f[side], side, layouts);
       }
-      const L = layouts[a.icao];
-      if (!L || !a.rwy) return null;
-      const geo = (name) => { const th = Airport.threshold(L, name); return th ? { name, th, end: th.end, hdg: bearing(th, th.end), len: M(th, th.end), strip: th.ref } : null; };
-      const P = geo(a.rwy); if (!P) return null;
+      // sans plan de vol (ou si le plan de vol ne donne rien d'utilisable ici) : l'aéroport où se trouve le joueur
+      const h = this.home;
+      if (!ctx && h && h.rwy && distNm(tel, h) <= 20) ctx = this.buildCtx(h, 'dep', layouts);
+      return ctx;
+    }
+    buildCtx(a, side, layouts) {
+      const L = a && layouts[a.icao];
+      if (!L || !L.runways || !L.runways.length) return null;
+      const geo = (name) => { if (!name) return null; const th = Airport.threshold(L, name); return th ? { name, th, end: th.end, hdg: bearing(th, th.end), len: M(th, th.end), strip: th.ref } : null; };
+      // piste du plan de vol, sinon piste réellement en service, sinon la plus longue de l'aéroport
+      let P = geo(a.rwy) || geo(side === 'arr' ? a.rwyLand : a.rwyTakeoff) || geo(a.rwyTakeoff) || geo(a.rwyLand);
+      if (!P) {
+        const ends = [...L.runways].sort((x, y) => M(y.pts[0], y.pts[y.pts.length - 1]) - M(x.pts[0], x.pts[x.pts.length - 1]))
+          .flatMap((r) => String(r.ref || '').split('/').map((x) => x.trim()).filter(Boolean));
+        for (const n of ends) { P = geo(n); if (P) break; }
+      }
+      if (!P) return null;
       // pistes réellement en service (si connues) : départs et arrivées peuvent être différentes
       const D = (a.rwyTakeoff && geo(a.rwyTakeoff)) || (side === 'dep' ? P : null) || P;
       const A = (a.rwyLand && geo(a.rwyLand)) || (side === 'arr' ? P : null) || P;
@@ -148,7 +156,8 @@
       const ctx = this.context(engine, layouts, tel);
       // hors des aéroports, en vol : trafic en route (vrais vols autour du joueur)
       const enroute = !ctx && tel && tel.lat != null && tel.onGround === false && (engine.flight || (tel.agl != null && tel.agl > 1500));
-      const key = ctx ? ctx.a.icao + ctx.a.rwy + (ctx.a.rwyTakeoff || '') + (ctx.a.rwyLand || '') : enroute ? 'ENROUTE' : null;
+      // même aéroport = même trafic (charger le plan de vol ou changer de piste ne fait plus disparaître les avions)
+      const key = ctx ? ctx.a.icao : enroute ? 'ENROUTE' : null;
       if (key !== this.side) { this.clear(); this.side = key; this.nextSpawn = now + 8000; this.liveAt = 0; this.live = null; this.conflictCache = {}; }
       if (enroute) { this.ctx = null; return this.enrouteTick(now, dt, tel); }
       if (!ctx) return;
