@@ -552,9 +552,9 @@
         if (act.needsLevel) {
           const lvl = Number(d.level); const ok = act.options && act.options.includes(lvl);
           if (!ok) { openLevel(act.options); return true; }
-          engine.pilotAction(act.id, lvl); return true;
+          micUnderstood(act, d.lang); engine.pilotAction(act.id, lvl); return true;
         }
-        engine.pilotAction(act.id); return true;
+        micUnderstood(act, d.lang); engine.pilotAction(act.id); return true;
       }
       case 'reply':
         if (!engine.flight || !d.atc) return false;
@@ -575,6 +575,8 @@
       default: return false;
     }
   }
+  // ce qu'ATC a compris (la transcription brute peut être approximative)
+  function micUnderstood(act, lang) { if (act) addMessage({ from: 'system', text: `✅ Compris : ${act.label}${lang ? ' (' + String(lang).toUpperCase() + ')' : ''}` }); }
   // Message écrit (barre « Écrivez librement »)
   async function sendFree() {
     const t = $('freeText').value.trim(); if (!t) return;
@@ -686,6 +688,7 @@
     if (!best || best.score < minScore) { engine.sayAgain(); return; }
     if (auto && best.lang) engine.setSpeak(best.lang);
     if (best.needsLevel && !level) { openLevel(best.options); return; }
+    micUnderstood(engine.actions().find((a) => a.id === best.id), best.lang);
     engine.pilotAction(best.id, best.needsLevel ? level : undefined);
   }
   setTimeout(() => { if (S.mic) micSetup(); }, 1500);
