@@ -28,3 +28,7 @@ Si vous activez le **Trafic réel** d'ATC, coupez le trafic live de MSFS (Option
 
 ---
 ATC est réservé à la simulation : ce n'est ni un produit Microsoft, ni un service de contrôle aérien réel.
+
+---
+<sub>Publication d'une version : mettre à jour `version` dans `package.json` et ajouter `notes/<version>.md`
+(sections « Ajouts », « Corrections », « Retraits »). Une version avec un tiret (ex. `0.2.0-beta.1`) est publiée en bêta.</sub>

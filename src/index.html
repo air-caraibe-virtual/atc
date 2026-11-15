@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; media-src 'self' blob: data:; img-src 'self' data: https://server.arcgisonline.com https://tile.openstreetmap.org https://tilecache.rainviewer.com">
+  <title>ATC</title>
+  <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="14" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="16" cy="16" r="8" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".5"/><path d="M16 16 L27 9" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><circle cx="21" cy="21" r="1.8" fill="currentColor"/></svg>
+      <div><strong>ATC</strong><span data-i18n="subtitle">Contrôle aérien pour MSFS 2024</span></div>
+    </div>
+    <div class="top-actions">
+      <span id="simPill" class="pill off"><i></i><span id="simText">MSFS non détecté</span></span>
+      <button id="btnAtisDep" class="ghost" disabled>ATIS départ</button>
+      <button id="btnAtisArr" class="ghost" disabled>ATIS arrivée</button>
+      <button id="btnNew" class="ghost" data-i18n="newFlight">Nouveau vol</button>
+      <button id="btnSettings" class="ghost icon" title="Paramètres">⚙</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="side">
+      <section class="card strip">
+        <div class="strip-head">
+          <div id="stCallsign" class="callsign">—</div>
+          <div id="stPhase" class="phase">Aucun vol</div>
+        </div>
+        <div id="stRoute" class="route">Chargez un plan de vol pour commencer</div>
+        <dl class="kv">
+          <div><dt data-i18n="cruise">Croisière</dt><dd id="stCruise">—</dd></div>
+          <div><dt>SID</dt><dd id="stSid">—</dd></div>
+          <div class="span2"><dt>Prochain palier</dt><dd id="stStep">—</dd></div>
+          <div><dt data-i18n="rwyDep">Piste départ</dt><dd id="stRwyDep">—</dd></div>
+          <div><dt data-i18n="rwyArr">Piste arrivée</dt><dd id="stRwyArr">—</dd></div>
+          <div><dt data-i18n="clearedAlt">Autorisé</dt><dd id="stCleared">—</dd></div>
+          <div><dt data-i18n="squawk">Transpondeur</dt><dd><span id="stSquawk">—</span> <button id="btnSquawk" class="mini" disabled data-i18n="set">Régler</button></dd></div>
+        </dl>
+      </section>
+
+      <section class="card station">
+        <div class="label" data-i18n="activeStation">Contrôleur à contacter</div>
+        <div id="stName" class="st-name">—</div>
+        <div id="stFreq" class="st-freq">———.———</div>
+        <div class="com-row">
+          <span id="comState" class="com"><b>COM1</b> <span id="comFreq">—</span></span>
+          <button id="btnCom" class="mini" disabled data-i18n="tuneCom">Régler COM1</button>
+        </div>
+      </section>
+
+      <section class="card tel">
+        <div><span>ALT</span><b id="tAlt">—</b></div>
+        <div><span>IAS</span><b id="tIas">—</b></div>
+        <div><span>GS</span><b id="tGs">—</b></div>
+        <div><span>V/S</span><b id="tVs">—</b></div>
+        <div><span>HDG</span><b id="tHdg">—</b></div>
+        <div><span data-i18n="distArr">DIST ARR</span><b id="tDist">—</b></div>
+      </section>
+
+      <section class="card tools">
+        <div class="label" data-i18n="resume">Reprendre à une étape</div>
+        <div class="row">
+          <select id="selResume"></select>
+          <button id="btnResume" class="mini" data-i18n="go">Aller</button>
+        </div>
+        <div id="demoBox" class="demo hidden">
+          <div class="label" data-i18n="demoMode">Mode démo</div>
+          <div class="row">
+            <span data-i18n="speed">Accélération croisière</span>
+            <select id="selDemoSpeed"><option value="1">×1</option><option value="4">×4</option><option value="10" selected>×10</option><option value="30">×30</option></select>
+          </div>
+        </div>
+      </section>
+    </aside>
+
+    <section class="radio card">
+      <div class="radio-head">
+        <div class="view-tabs"><button class="vtab active" data-view="radio">Radio</button><button class="vtab" data-view="map">Carte</button></div>
+        <div class="head-toggles"><label class="toggle" title="Avions IA créés par ATC à partir des vrais vols du moment"><input type="checkbox" id="chkTraffic"> <span>Trafic réel</span></label><label class="toggle"><input type="checkbox" id="chkAutoRb"> <span>Collationnement auto</span></label><label class="toggle"><input type="checkbox" id="chkMute"> <span data-i18n="mute">Couper la voix</span></label></div>
+      </div>
+      <div id="log" class="log">
+        <div class="empty">
+          <h2 data-i18n="welcomeTitle">Bienvenue à bord</h2>
+          <p data-i18n="welcomeText">Chargez votre plan de vol SimBrief (ou saisissez-le), lancez MSFS 2024, puis suivez les instructions des contrôleurs. Ils vous répondent à voix haute.</p>
+          <button id="btnStart" class="primary" data-i18n="loadFlight">Charger un vol</button>
+        </div>
+      </div>
+      <div id="mapView" class="mapview hidden">
+        <div id="map"></div>
+        <div class="map-info">
+          <div><span>Prochain point</span><b id="mNext">—</b></div>
+          <div><span>Distance</span><b id="mNextDist">—</b></div>
+          <div><span>Route</span><b id="mRemain">—</b></div>
+          <div id="radarInfo" class="hidden"><span>Radar</span><b id="mRadar">—</b></div>
+        </div>
+        <div class="map-ctrl">
+          <label class="toggle"><input type="checkbox" id="chkFollow" checked> <span>Suivre l'avion</span></label>
+          <button id="btnFitRoute" class="mini">Voir toute la route</button>
+          <label class="toggle"><input type="checkbox" id="chkRadar"> <span>Radar météo</span></label>
+          <select id="selMapStyle" class="mini-sel"><option value="dark">Sombre</option><option value="osm">Plan</option><option value="sat">Satellite</option></select>
+        </div>
+        <div id="mapLastAtc" class="map-atc hidden"></div>
+      </div>
+      <div id="notice" class="notice hidden"></div>
+      <div id="actions" class="actions"></div>
+    </section>
+  </main>
+
+  <!-- Nouveau vol -->
+  <div id="dlgFlight" class="overlay hidden">
+    <div class="dialog">
+      <div class="dlg-head"><h3 data-i18n="newFlight">Nouveau vol</h3><button class="ghost icon" data-close>✕</button></div>
+      <div class="tabs">
+        <button class="tab active" data-tab="sb">SimBrief</button>
+        <button class="tab" data-tab="man" data-i18n="manual">Saisie manuelle</button>
+        <button class="tab" data-tab="demo" data-i18n="demo">Démo sans MSFS</button>
+      </div>
+      <div class="tab-body" data-body="sb">
+        <label><span data-i18n="sbUser">Identifiant SimBrief (pseudo ou numéro)</span><input id="inSbUser" autocomplete="off" placeholder="votre pseudo SimBrief"></label>
+        <p class="hint" data-i18n="sbHint">Le dernier plan de vol généré sur SimBrief est récupéré : indicatif, aéroports, pistes, SID et niveau de croisière.</p>
+        <button id="btnLoadSb" class="primary" data-i18n="load">Charger</button>
+      </div>
+      <div class="tab-body hidden" data-body="man">
+        <div class="grid2">
+          <label><span data-i18n="callsign">Indicatif</span><input id="inCs" placeholder="FWI512"></label>
+          <label><span data-i18n="cruiseFl">Niveau de croisière (FL)</span><input id="inFl" type="number" placeholder="350"></label>
+          <label><span data-i18n="depIcao">Départ (OACI)</span><input id="inDep" placeholder="TFFR"></label>
+          <label><span data-i18n="arrIcao">Arrivée (OACI)</span><input id="inArr" placeholder="LFPO"></label>
+          <label><span data-i18n="rwyDepOpt">Piste départ (facultatif)</span><input id="inRwyDep" placeholder="auto"></label>
+          <label><span data-i18n="rwyArrOpt">Piste arrivée (facultatif)</span><input id="inRwyArr" placeholder="auto"></label>
+          <label class="span2"><span data-i18n="sidOpt">SID (facultatif)</span><input id="inSid" placeholder="ex. OKASI5A"></label>
+        </div>
+        <button id="btnLoadMan" class="primary" data-i18n="load">Charger</button>
+      </div>
+      <div class="tab-body hidden" data-body="demo">
+        <p class="hint" data-i18n="demoHint">Un vol Pointe-à-Pitre → Fort-de-France avec un avion fictif qui suit vos clairances. Idéal pour découvrir le logiciel sans lancer le simulateur.</p>
+        <button id="btnLoadDemo" class="primary" data-i18n="startDemo">Lancer la démo</button>
+      </div>
+      <div id="flightErr" class="err hidden"></div>
+    </div>
+  </div>
+
+  <!-- Choix du niveau -->
+  <div id="dlgLevel" class="overlay hidden">
+    <div class="dialog small">
+      <div class="dlg-head"><h3>Demander un niveau</h3><button class="ghost icon" data-close>✕</button></div>
+      <p class="hint">Niveau actuel autorisé : <b id="levelCur">—</b>. Choisissez le niveau que vous voulez demander au Contrôle.</p>
+      <div id="levelGrid" class="level-grid"></div>
+    </div>
+  </div>
+
+  <!-- Mise à jour / nouveautés -->
+  <div id="dlgUpdate" class="overlay hidden">
+    <div class="dialog">
+      <div class="dlg-head"><h3 id="updTitle">Mise à jour disponible</h3><button class="ghost icon" data-close>✕</button></div>
+      <p id="updSub" class="hint"></p>
+      <div id="updNotes" class="notes"></div>
+      <div id="updProgress" class="progress hidden"><div id="updBar"></div></div>
+      <div id="updErr" class="err hidden"></div>
+      <div class="row end"><button id="btnUpdLater" class="ghost">Plus tard</button><button id="btnUpdNow" class="primary">Installer maintenant</button></div>
+    </div>
+  </div>
+
+  <!-- Paramètres -->
+  <div id="dlgSettings" class="overlay hidden">
+    <div class="dialog">
+      <div class="dlg-head"><h3 data-i18n="settings">Paramètres</h3><button class="ghost icon" data-close>✕</button></div>
+      <div class="grid2">
+        <label><span data-i18n="language">Langue ATC</span>
+          <select id="setLang"><option value="fr">Français</option><option value="en">English (OACI)</option></select></label>
+        <label><span>Moteur vocal</span>
+          <select id="setTts"><option value="neural">Voix naturelles (Internet)</option><option value="system">Voix Windows (hors ligne)</option></select></label>
+        <label><span data-i18n="voice">Voix des contrôleurs</span><select id="setVoice"></select></label>
+        <label><span>Effet radio</span>
+          <select id="setFx"><option value="off">Aucun (voix claire)</option><option value="medium">Radio VHF</option><option value="strong">Radio VHF forte (grésillante)</option></select></label>
+        <label><span data-i18n="rate">Débit de parole</span><input id="setRate" type="range" min="0.7" max="1.5" step="0.05"></label>
+        <label><span data-i18n="volume">Volume</span><input id="setVol" type="range" min="0" max="1" step="0.05"></label>
+      </div>
+      <label class="check"><input type="checkbox" id="setSquelch"> <span data-i18n="squelch">Bruit d'alternat (« pshht » avant et après chaque message)</span></label>
+      <label class="check"><input type="checkbox" id="setPilotVoice"> <span data-i18n="pilotVoice">Lire aussi mes messages à voix haute</span></label>
+      <label class="check"><input type="checkbox" id="setCom"> <span data-i18n="requireCom">Exiger la bonne fréquence sur COM1 pour parler</span></label>
+      <label class="check"><input type="checkbox" id="setAutoCom"> <span data-i18n="autoCom">Régler COM1 automatiquement à chaque changement de contrôleur</span></label>
+      <label class="check">Nombre d'avions IA (trafic réel) <select id="setTrafficMax" class="mini-sel" style="margin-left:8px"><option value="4">4</option><option value="8">8</option><option value="12">12</option><option value="16">16</option><option value="24">24</option></select></label>
+      <label class="check"><input type="checkbox" id="setFsltl"> <span>Utiliser les avions FSLTL en priorité pour le trafic réel</span></label>
+      <label class="check"><input type="checkbox" id="setAutoRb"> <span>Collationner automatiquement les instructions</span></label>
+      <label class="check"><input type="checkbox" id="setAutoPush"> <span>Repoussage automatique avec le tracteur de MSFS</span></label>
+      <label class="check"><input type="checkbox" id="setAutoXpdr"> <span>Régler le transpondeur automatiquement après la clairance</span></label>
+      <label class="check"><input type="checkbox" id="setBeta"> <span>Recevoir les versions bêta (nouveautés en avance, peuvent contenir des bugs)</span></label>
+      <div class="row version-row"><span id="appVer" class="hint">Version —</span><button id="btnCheckUpd" class="mini">Rechercher une mise à jour</button></div>
+      <div class="row end"><button id="btnTestVoice" class="ghost" data-i18n="testVoice">Tester la voix</button><button class="primary" data-close data-i18n="close">Fermer</button></div>
+    </div>
+  </div>
+
+  <script src="engine.js"></script>
+  <script src="demo.js"></script>
+  <script src="vendor/leaflet/leaflet.js"></script>
+  <script src="notam.js"></script>
+  <script src="airport.js"></script>
+  <script src="rwyuse.js"></script>
+  <script src="traffic.js"></script>
+  <script src="map.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

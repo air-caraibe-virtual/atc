@@ -1,0 +1,50 @@
+# Fabrique l'installateur Windows d'ATC et publie la mise à jour quand le numéro de version change
+name: Publier une version
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'package.json'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Installer les dépendances
+        run: npm ci
+      - name: Lire la version
+        id: v
+        shell: bash
+        run: |
+          V=$(node -p "require('./package.json').version")
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "numver=${V%%-*}" >> "$GITHUB_OUTPUT"
+          if [[ "$V" == *-* ]]; then echo "pre=true" >> "$GITHUB_OUTPUT"; echo "Pré-version bêta $V"; else echo "pre=false" >> "$GITHUB_OUTPUT"; echo "Version officielle $V"; fi
+          if [ ! -f "notes/$V.md" ]; then echo "Il manque notes/$V.md (ce que les pilotes verront : ajouts, corrections, retraits)"; exit 1; fi
+      - name: Fabriquer l'application
+        run: npx electron-builder --win dir --x64 --publish never
+      - name: Icône et version dans ATC.exe
+        run: node build/rcedit.js
+      - name: Fabriquer l'installateur
+        shell: bash
+        run: |
+          cd installer
+          "/c/Program Files (x86)/NSIS/makensis.exe" -V2 -DVERSION="${{ steps.v.outputs.version }}" -DNUMVER="${{ steps.v.outputs.numver }}" atc-solo.nsi
+      - name: Publier la version
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.v.outputs.version }}
+          name: ATC ${{ steps.v.outputs.version }}
+          body_path: notes/${{ steps.v.outputs.version }}.md
+          prerelease: ${{ steps.v.outputs.pre }}
+          files: dist/ATC-Setup-${{ steps.v.outputs.version }}.exe

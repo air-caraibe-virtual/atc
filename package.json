@@ -1,0 +1,46 @@
+{
+  "name": "atc-solo",
+  "productName": "ATC",
+  "version": "0.1.0",
+  "description": "ATC — contrôle aérien vocal pour Microsoft Flight Simulator 2024",
+  "main": "main.js",
+  "author": "ATC",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "leaflet": "^1.9.4",
+    "msedge-tts": "^2.1.1",
+    "node-simconnect": "^4.0.0"
+  },
+  "scripts": {
+    "start": "electron .",
+    "test": "node test/flight.test.js",
+    "dist": "bash build/make.sh"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "rcedit": "^4.0.1"
+  },
+  "build": {
+    "appId": "fr.atcsolo.app",
+    "productName": "ATC",
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "package.json",
+      "build/icon.png"
+    ],
+    "win": {
+      "target": "dir",
+      "icon": "build/icon.ico",
+      "signAndEditExecutable": false,
+      "legalTrademarks": "",
+      "publisherName": "ATC"
+    },
+    "copyright": "© 2026 ATC",
+    "directories": {
+      "buildResources": "build"
+    }
+  }
+}
