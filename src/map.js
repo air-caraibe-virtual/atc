@@ -288,6 +288,24 @@
       if (next > this.nextIdx || bestD < 30) this.nextIdx = Math.max(1, next);
     },
 
+    // Avion du joueur seul, sans plan de vol chargé
+    showPlane(tel) {
+      if (!this.map || !tel || tel.lat == null || tel.inFlight === false) return;
+      const L = root.L;
+      if (!this.plane) {
+        this.plane = L.marker([tel.lat, tel.lon], { icon: this.planeIcon(tel.hdg || 0), interactive: false, zIndexOffset: 1000 }).addTo(this.map);
+        this.followZoom = true;
+      }
+      this.plane.setLatLng([tel.lat, tel.lon]);
+      const h = tel.hdgTrue != null ? tel.hdgTrue : tel.hdg || 0;
+      if (this.plane._hdg == null || Math.abs(this.plane._hdg - h) > 1) { this.plane._hdg = h; this.plane.setIcon(this.planeIcon(h)); }
+      const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+      set('mNext', '—'); set('mNextDist', '—'); set('mRemain', 'aucun plan de vol');
+      if (this.follow && this.visible) {
+        if (this.followZoom) { this.map.setView([tel.lat, tel.lon], tel.onGround ? 15 : 8, { animate: false }); this.followZoom = false; }
+        else this.map.setView([tel.lat, tel.lon], this.map.getZoom(), { animate: false });
+      }
+    },
     update(f, tel) {
       if (!this.map || !f) return;
       const key = f.callsign + f.dep.icao + f.arr.icao;

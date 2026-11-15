@@ -924,7 +924,7 @@
     engine.tick(Date.now(), currentTel());
     autoReadback();
     updateGround();
-    if (window.MapView && engine.flight) MapView.update(engine.flight, currentTel());
+    if (window.MapView && MapView.map) { if (engine.flight) MapView.update(engine.flight, currentTel()); else MapView.showPlane(currentTel()); }
     updateTaxiRoute();
     render();
   }, 500);
