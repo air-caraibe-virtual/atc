@@ -1,5 +1,5 @@
 // ATC — processus principal : fenêtre, liaison SimConnect (MSFS 2024), accès réseau.
-const { app, BrowserWindow, ipcMain, net, shell, Notification, globalShortcut, session } = require('electron');
+const { app, BrowserWindow, ipcMain, net, shell, Notification, globalShortcut, session, Tray, Menu, nativeImage } = require('electron');
 const path = require('path');
 const { MsEdgeTTS, OUTPUT_FORMAT } = require('msedge-tts');
 const {
@@ -781,10 +781,50 @@ function createWindow() {
   win.setMenuBarVisibility(false);
   win.loadFile(path.join(__dirname, 'src', 'index.html'));
   win.webContents.once('did-finish-load', connectSim);
+  // la croix réduit ATC dans la zone de notification (en bas à droite) ; « Quitter l'ATC » ferme vraiment
+  win.on('close', (e) => {
+    if (quitting) return;
+    e.preventDefault();
+    win.hide();
+    if (!trayTipShown) {
+      trayTipShown = true;
+      try { if (tray && tray.displayBalloon) tray.displayBalloon({ title: 'ATC continue en arrière-plan', content: 'Cliquez sur l\'icône ATC en bas à droite pour le rouvrir. Clic droit → « Quitter l\'ATC » pour le fermer.', iconType: 'info' }); } catch (_) {}
+    }
+  });
+  createTray();
 }
+
+// ---------- Zone de notification (icône en bas à droite) ----------
+let tray = null, quitting = false, trayTipShown = false;
+function showWin() {
+  if (!win || win.isDestroyed()) return;
+  if (win.isMinimized()) win.restore();
+  win.show(); win.focus();
+}
+function quitApp() { quitting = true; app.quit(); }
+function createTray() {
+  if (tray) return;
+  try {
+    const img = nativeImage.createFromPath(path.join(__dirname, 'build', 'icon.png')).resize({ width: 16, height: 16 });
+    tray = new Tray(img);
+    tray.setToolTip('ATC');
+    tray.setContextMenu(Menu.buildFromTemplate([
+      { label: 'Ouvrir ATC', click: showWin },
+      { type: 'separator' },
+      { label: 'Quitter l\'ATC', click: quitApp },
+    ]));
+    tray.on('click', showWin);
+    tray.on('double-click', showWin);
+  } catch (e) { console.warn('Icône de notification indisponible', e); }
+}
+ipcMain.handle('app-quit', () => { quitApp(); });
+app.on('before-quit', () => { quitting = true; });
 
 app.setAppUserModelId('fr.atcsolo.app');
 app.setPath('userData', path.join(app.getPath('appData'), 'ATC Solo'));
+// une seule ATC à la fois : relancer ATC rouvre la fenêtre déjà ouverte (même cachée en bas à droite)
+if (!app.requestSingleInstanceLock()) app.exit(0);
+app.on('second-instance', () => showWin());
 app.whenReady().then(() => {
   // autorise le micro pour la fenêtre d'ATC
   try { session.defaultSession.setPermissionRequestHandler((_wc, perm, cb) => cb(true)); } catch (_) {}

@@ -31,6 +31,7 @@ contextBridge.exposeInMainWorld('sim', {
   onSttProgress: (cb) => ipcRenderer.on('stt-progress', (_e, d) => cb(d)),
   micShortcut: (accel) => ipcRenderer.invoke('mic-shortcut', accel),
   onMicToggle: (cb) => ipcRenderer.on('mic-toggle', () => cb()),
+  quitApp: () => ipcRenderer.invoke('app-quit'),
   appVersion: () => ipcRenderer.invoke('app-version'),
   updateAttention: (o) => ipcRenderer.invoke('update-attention', o),
   onUpdateShow: (cb) => ipcRenderer.on('update-show', () => cb()),

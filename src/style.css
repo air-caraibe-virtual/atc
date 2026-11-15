@@ -194,3 +194,7 @@ input[type=checkbox] { accent-color: var(--accent); }
 .actions .act.mic { border-style: dashed; }
 .actions .act.mic.rec { border-color: #e5484d; background: rgba(229,72,77,.15); animation: micpulse 1.2s ease-in-out infinite; }
 @keyframes micpulse { 50% { box-shadow: 0 0 0 4px rgba(229,72,77,.25); } }
+
+/* Quitter l'ATC */
+.top-actions .quit { color: #ff8a8f; border-color: rgba(229,72,77,.45); }
+.top-actions .quit:hover { background: rgba(229,72,77,.15); color: #fff; }

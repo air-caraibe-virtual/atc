@@ -659,6 +659,8 @@
   });
   $('btnLoadDemo').onclick = () => startFlight(async () => demoFlight(), true);
 
+  // la croix garde ATC en bas à droite ; ce bouton le ferme vraiment
+  if ($('btnQuit')) $('btnQuit').onclick = () => { if (api && api.quitApp) api.quitApp(); else window.close(); };
   $('btnSettings').onclick = () => {
     $('setLang').value = S.radioMode; $('setTts').value = S.ttsEngine; $('setFx').value = S.radioFx; fillVoiceSelect(); $('setRate').value = S.rate; $('setVol').value = S.volume;
     $('setSquelch').checked = S.squelch; $('setPilotVoice').checked = S.pilotVoice; $('setCom').checked = S.requireCom; $('setAutoCom').checked = S.autoCom; $('setAutoXpdr').checked = S.autoXpdr; $('setAutoPush').checked = S.autoPush !== false; $('setTrafficMax').value = String(S.trafficMax || 16); $('setFsltl').checked = S.preferFsltl !== false; $('setAutoRb').checked = S.autoReadback; $('setMic').checked = !!S.mic; $('setMicKey').value = S.micKey || '';
