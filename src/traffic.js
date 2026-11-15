@@ -15,6 +15,9 @@
     const lo2 = lo1 + Math.atan2(Math.sin(b) * Math.sin(d) * Math.cos(la1), Math.cos(d) - Math.sin(la1) * Math.sin(la2));
     return { lat: (la2 * 180) / Math.PI, lon: (lo2 * 180) / Math.PI };
   }
+  // feux d'un avion IA selon ce qu'il fait
+  const lightMode = (a) => (a.static || a.state === 'parked' || a.state === 'parked_in' || a.state === 'taxi_wait' ? 'park'
+    : a.light ? 'rwy' : a.onGround ? 'taxi' : 'cruise');
   const angDiff = (a, b) => Math.abs(((a - b + 540) % 360) - 180);
   const turnTo = (h, target, maxDeg) => { const d = ((target - h + 540) % 360) - 180; return (h + Math.max(-maxDeg, Math.min(maxDeg, d)) + 360) % 360; };
 
@@ -160,7 +163,7 @@
         const vs = a.prevAlt != null && dt > 0 ? ((a.alt - a.prevAlt) / dt) * 60 : 0; a.prevAlt = a.alt;
         return {
         id: a.id, lat: a.pos.lat, lon: a.pos.lon, alt: a.alt, hdg: a.hdg, pitch: a.pitch, bank: a.bank || 0, v: a.static ? 0 : a.v, vs: a.onGround ? 0 : vs,
-        onGround: a.onGround, gear: a.gear, light: a.light,
+        onGround: a.onGround, gear: a.gear, light: a.light, lights: lightMode(a),
       }; }));
     }
 
@@ -188,7 +191,7 @@
       gone.forEach((a) => { this.io.remove(a.id); this.used.delete(a.cs); });
       this.ai = this.ai.filter((a) => a.state !== 'gone');
       this.io.move(this.ai.filter((a) => a.ready).map((a) => ({
-        id: a.id, lat: a.pos.lat, lon: a.pos.lon, alt: a.alt, hdg: a.hdg, pitch: a.pitch, bank: a.bank, v: a.v, vs: a.vs, onGround: false, gear: false, light: a.alt < 10000,
+        id: a.id, lat: a.pos.lat, lon: a.pos.lon, alt: a.alt, hdg: a.hdg, pitch: a.pitch, bank: a.bank, v: a.v, vs: a.vs, onGround: false, gear: false, light: a.alt < 10000, lights: a.alt < 10000 ? 'rwy' : 'cruise',
       })));
     }
     ensureModels(now, tel) {

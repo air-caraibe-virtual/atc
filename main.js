@@ -14,7 +14,7 @@ let retryTimer = null;
 
 const DEF_TEL = 0, REQ_TEL = 0, DEF_FAC = 1, DEF_FENIX = 2, REQ_FENIX = 2, DEF_FENIX_XFER = 3;
 // ---- Trafic IA créé et piloté par ATC ----
-const DEF_AIPOS = 10, DEF_AIGND = 11, DEF_AIGEAR = 12, DEF_AIGEARPOS = 13, EV_GEAR_SET = 61, REQ_MODELS = 40, REQ_AI_BASE = 1000, REQ_AIGND_BASE = 5000;
+const DEF_AIPOS = 10, DEF_AIGND = 11, DEF_AIGEAR = 12, DEF_AIGEARPOS = 13, DEF_AILIGHT = 14, EV_LSET_BASE = 70, EV_GEAR_SET = 61, REQ_MODELS = 40, REQ_AI_BASE = 1000, REQ_AIGND_BASE = 5000;
 const EV_FRZ_LL = 50, EV_FRZ_ALT = 51, EV_FRZ_ATT = 52, EV_GEAR_UP = 53, EV_GEAR_DN = 54, EV_LAND_ON = 55, EV_LAND_OFF = 56, EV_BCN_ON = 57, EV_STROBE_ON = 58, EV_STROBE_OFF = 59, EV_ENG_AUTO = 60;
 const ai = { byReq: new Map(), byLocal: new Map(), byObj: new Map(), models: null, modelsWait: [] };
 // Fenix A320/A319/A321 : la radio passe par le RMP de l'avion (variables internes en kHz)
@@ -156,6 +156,9 @@ async function connectSim() {
       // position réelle des trains (0 = rentré, 1 = sorti) : réglée directement, car les avions figés n'animent pas toujours leur train
       ['GEAR CENTER POSITION', 'GEAR LEFT POSITION', 'GEAR RIGHT POSITION'].forEach((n) => handle.addToDataDefinition(DEF_AIGEARPOS, n, 'percent over 100', SimConnectDataType.FLOAT64));
       handle.mapClientEventToSimEvent(EV_GEAR_SET, 'GEAR_SET');
+      // feux des avions IA : écrits directement (les avions figés ignorent souvent les commandes)
+      AI_LIGHTS.forEach(([v]) => handle.addToDataDefinition(DEF_AILIGHT, v, 'bool', SimConnectDataType.FLOAT64));
+      AI_LIGHTS.forEach(([, e], i) => handle.mapClientEventToSimEvent(EV_LSET_BASE + i, e));
       [[EV_FRZ_LL, 'FREEZE_LATITUDE_LONGITUDE_SET'], [EV_FRZ_ALT, 'FREEZE_ALTITUDE_SET'], [EV_FRZ_ATT, 'FREEZE_ATTITUDE_SET'], [EV_GEAR_UP, 'GEAR_UP'], [EV_GEAR_DN, 'GEAR_DOWN'],
         [EV_LAND_ON, 'LANDING_LIGHTS_ON'], [EV_LAND_OFF, 'LANDING_LIGHTS_OFF'], [EV_BCN_ON, 'BEACON_LIGHTS_ON'], [EV_STROBE_ON, 'STROBES_ON'], [EV_STROBE_OFF, 'STROBES_OFF'], [EV_ENG_AUTO, 'ENGINE_AUTO_START']]
         .forEach(([id, n]) => handle.mapClientEventToSimEvent(id, n));
@@ -286,6 +289,21 @@ ipcMain.handle('ai-spawn', (_e, id, title, livery, tail, p) => {
     return true;
   } catch (e) { ai.byLocal.delete(id); ai.byReq.delete(req); return false; }
 });
+// Feux selon la phase : parking, roulage, piste (décollage / approche), croisière
+const AI_LIGHTS = [['LIGHT NAV', 'NAV_LIGHTS_SET'], ['LIGHT BEACON', 'BEACON_LIGHTS_SET'], ['LIGHT STROBE', 'STROBES_SET'], ['LIGHT LANDING', 'LANDING_LIGHTS_SET'], ['LIGHT TAXI', 'TAXI_LIGHTS_SET'], ['LIGHT LOGO', 'LOGO_LIGHTS_SET'], ['LIGHT WING', 'WING_LIGHTS_SET']];
+const LIGHT_MODES = {
+  //       nav beacon strobe landing taxi logo wing
+  park:   [1, 0, 0, 0, 0, 1, 0],
+  taxi:   [1, 1, 0, 0, 1, 1, 0],
+  rwy:    [1, 1, 1, 1, 1, 1, 1],
+  cruise: [1, 1, 1, 0, 0, 1, 0],
+};
+function applyLights(o, mode) {
+  const v = LIGHT_MODES[mode]; if (!handle || o.obj == null || !v) return;
+  o.lights = mode; o.lightSent = Date.now();
+  try { const b = new RawBuffer(8 * v.length); v.forEach((x) => b.writeFloat64(x)); handle.setDataOnSimObject(DEF_AILIGHT, o.obj, { buffer: b, arrayCount: 0, tagged: false }); } catch (_) {}
+  v.forEach((x, i) => { try { handle.transmitClientEvent(o.obj, EV_LSET_BASE + i, x, NotificationPriority.HIGHEST, EventFlag.EVENT_FLAG_GROUPID_IS_PRIORITY); } catch (_) {} });
+}
 // L'interface envoie l'état voulu ~10 fois par seconde (position, cap, vitesse, vario) ;
 // ici on l'extrapole et on le lisse à chaque image du simulateur pour un mouvement fluide de près.
 ipcMain.on('ai-move', (_e, list) => {
@@ -298,6 +316,7 @@ ipcMain.on('ai-move', (_e, list) => {
     const ev = (id) => { try { handle.transmitClientEvent(o.obj, id, 0, NotificationPriority.HIGHEST, EventFlag.EVENT_FLAG_GROUPID_IS_PRIORITY); } catch (_) {} };
     if (m.gear != null && m.gear !== o.gear) applyGear(o, m.gear);
     if (m.light != null && m.light !== o.light) { o.light = m.light; ev(m.light ? EV_LAND_ON : EV_LAND_OFF); ev(m.light ? EV_STROBE_ON : EV_STROBE_OFF); }
+    if (m.lights && m.lights !== o.lights) applyLights(o, m.lights);
   }
 });
 // Train d'atterrissage : commande, événement de position et manette (les avions figés ratent parfois l'un des trois)
@@ -358,6 +377,7 @@ function aiFrame() {
       o.lastFreeze = now;
       [EV_FRZ_LL, EV_FRZ_ALT, EV_FRZ_ATT].forEach((id) => { try { handle.transmitClientEvent(o.obj, id, 1, NotificationPriority.HIGHEST, EventFlag.EVENT_FLAG_GROUPID_IS_PRIORITY); } catch (_) {} });
       applyGear(o, o.wantGear); // on réaffirme aussi l'état du train
+      if (o.lights) applyLights(o, o.lights); // et les feux
     }
   }
 }
