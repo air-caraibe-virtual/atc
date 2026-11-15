@@ -13,5 +13,5 @@ wine "$HOME/.cache/electron-builder/winCodeSign/winCodeSign-2.6.0/rcedit-x64.exe
   --set-version-string LegalCopyright "(c) 2026 ATC" --set-version-string InternalName ATC \
   --set-version-string OriginalFilename ATC.exe \
   --set-file-version "$NUMVER" --set-product-version "$VERSION" --set-icon build/icon.ico
-(cd installer && makensis -V2 -DVERSION="$VERSION" -DNUMVER="$NUMVER" atc-solo.nsi)
+(cd installer && makensis -INPUTCHARSET UTF8 -V2 -DVERSION="$VERSION" -DNUMVER="$NUMVER" atc-solo.nsi)
 ls -la dist/*.exe

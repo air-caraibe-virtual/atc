@@ -1,4 +1,4 @@
-; Installateur d'ATC — contrôle aérien pour Microsoft Flight Simulator 2024
+﻿; Installateur d'ATC — contrôle aérien pour Microsoft Flight Simulator 2024
 Unicode true
 !include "MUI2.nsh"
 !include "FileFunc.nsh"

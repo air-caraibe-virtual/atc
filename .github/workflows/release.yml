@@ -44,7 +44,7 @@ jobs:
         shell: bash
         run: |
           cd installer
-          "/c/Program Files (x86)/NSIS/makensis.exe" -V2 -DVERSION="${{ steps.v.outputs.version }}" -DNUMVER="${{ steps.v.outputs.numver }}" atc-solo.nsi
+          "/c/Program Files (x86)/NSIS/makensis.exe" -INPUTCHARSET UTF8 -V2 -DVERSION="${{ steps.v.outputs.version }}" -DNUMVER="${{ steps.v.outputs.numver }}" atc-solo.nsi
       - name: Publier la version
         uses: softprops/action-gh-release@v2
         with:
