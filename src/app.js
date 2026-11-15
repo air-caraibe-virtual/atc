@@ -927,8 +927,7 @@
   let homeBusy = false, homeAt = 0;
   async function updateHome() {
     const t = currentTel();
-    // avec ou sans plan de vol : on repère toujours l'aéroport où se trouve le joueur (secours du trafic réel)
-    if (!S.traffic || !t || t.lat == null || !api || !api.nearestAirport || !api.airportLayout) return;
+    if (!S.traffic || engine.flight || !t || t.lat == null || !api || !api.nearestAirport || !api.airportLayout) return;
     if (t.onGround === false && (t.agl == null || t.agl > 1500)) return; // en vol : trafic en route
     const h = traffic.home;
     if (h && utils.distNm(t, h) < 8) return;
@@ -937,7 +936,7 @@
     try {
       const list = await api.nearestAirport(t.lat, t.lon);
       const n = list && list.find((x) => utils.distNm(t, x) < 8);
-      if (!n) return;
+      if (!n || engine.flight) return;
       if (!layouts[n.icao]) { const json = await api.airportLayout(n.icao, n.lat, n.lon); if (json) layouts[n.icao] = Airport.parse(json); }
       await useSimParking(n.icao);
       const L = layouts[n.icao]; if (!L || !L.runways || !L.runways.length || !window.MapView) return;
@@ -958,11 +957,11 @@
         if (res && res.dep && res.dep.length) { home.rwyTakeoff = res.dep[0]; home.rwy = res.dep[0]; }
         if (res && res.arr && res.arr.length) home.rwyLand = res.arr[0];
       } catch (_) {}
-      if (!home.rwy) return;
+      if (!home.rwy || engine.flight) return;
       traffic.home = home;
       pushLayout(n.icao);
       const dep = home.rwyTakeoff || home.rwy, arr = home.rwyLand || home.rwy;
-      addMessage({ from: 'system', text: `Trafic réel autour de ${n.name || n.icao} (${n.icao}) : ${dep === arr ? `piste ${dep}` : `départs ${dep}, arrivées ${arr}`}. Les vrais avions arrivent dans quelques secondes.` });
+      addMessage({ from: 'system', text: `Trafic réel sans plan de vol : ${n.name || n.icao} (${n.icao}), ${dep === arr ? `piste ${dep}` : `départs ${dep}, arrivées ${arr}`}. Les vrais avions arrivent dans quelques secondes.` });
     } catch (_) {} finally { homeBusy = false; }
   }
   setInterval(updateHome, 5000);
