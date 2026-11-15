@@ -302,7 +302,7 @@
     pt: { DEL: 'Autorização', GND: 'Solo', TWR: 'Torre', DEP: 'Saída', APP: 'Aproximação', CTR: 'Controle' },
   };
   const PHASE_LABEL = {
-    fr: { IDLE: 'Aucun vol', PRE: 'Clairance', CLEARED: 'Autorisé', STARTUP: 'Mise en route', TAXI_OUT: 'Roulage', HOLDING: "Point d'arrêt", LINEUP: 'Alignement', TAKEOFF: 'Décollage', DEP_CHECKIN: 'Départ', CLIMB: 'Montée', CTR_CHECKIN: 'Contrôle', CRUISE: 'Croisière', DESCENT: 'Descente', APP_CHECKIN: 'Approche', APPROACH: 'Approche', FINAL: 'Finale', TWR_CHECKIN: 'Finale', LANDING: 'Atterrissage', VACATING: 'Dégagement', TAXI_IN: 'Roulage arrivée', DONE: 'Terminé' },
+    fr: { IDLE: 'Aucun vol', PRE: 'Clearance', CLEARED: 'Autorisé', STARTUP: 'Mise en route', TAXI_OUT: 'Roulage', HOLDING: "Point d'arrêt", LINEUP: 'Alignement', TAKEOFF: 'Décollage', DEP_CHECKIN: 'Départ', CLIMB: 'Montée', CTR_CHECKIN: 'Contrôle', CRUISE: 'Croisière', DESCENT: 'Descente', APP_CHECKIN: 'Approche', APPROACH: 'Approche', FINAL: 'Finale', TWR_CHECKIN: 'Finale', LANDING: 'Atterrissage', VACATING: 'Dégagement', TAXI_IN: 'Roulage arrivée', DONE: 'Terminé' },
     en: { IDLE: 'No flight', PRE: 'Preflight', CLEARED: 'Cleared', STARTUP: 'Start-up', TAXI_OUT: 'Taxi', HOLDING: 'Holding point', LINEUP: 'Line-up', TAKEOFF: 'Take-off', DEP_CHECKIN: 'Departure', CLIMB: 'Climb', CTR_CHECKIN: 'Control', CRUISE: 'Cruise', DESCENT: 'Descent', APP_CHECKIN: 'Approach', APPROACH: 'Approach', FINAL: 'Final', TWR_CHECKIN: 'Final', LANDING: 'Landing', VACATING: 'Vacating', TAXI_IN: 'Taxi-in', DONE: 'Done' },
   };
   const AIRBORNE = ['TAKEOFF', 'DEP_CHECKIN', 'CLIMB', 'CTR_CHECKIN', 'CRUISE', 'DESCENT', 'APP_CHECKIN', 'APPROACH', 'FINAL', 'TWR_CHECKIN', 'LANDING'];
@@ -520,7 +520,9 @@
         if (p == null || p === '') continue;
         if (typeof p === 'string') { t.push(p); s.push(p); } else { t.push(p.text); s.push(p.speech); }
       }
-      return { text: t.join(' ').replace(/\s+([,.])/g, '$1').replace(/\s+/g, ' ').trim(), speech: s.join(' ').replace(/\s+([,.])/g, '$1').replace(/\s+/g, ' ').trim() };
+      let sp = s.join(' ').replace(/\s+([,.])/g, '$1').replace(/\s+/g, ' ').trim();
+      if (this.lang === 'fr') sp = sp.replace(/\bclearance\b/gi, 'cliranse'); // prononcé à l'anglaise par la voix française
+      return { text: t.join(' ').replace(/\s+([,.])/g, '$1').replace(/\s+/g, ' ').trim(), speech: sp };
     }
 
     // ----- émission -----
@@ -838,7 +840,7 @@
       const list = [];
       const add = (id, label, primary) => { const m = this.withLang(this.pilotLang(), () => this._pilotMsg(id)); if (m) list.push({ id, label, preview: m.text, primary: !!primary }); };
       switch (this.phase) {
-        case 'PRE': add('req_clearance', L('Demander la clairance', 'Request clearance'), true); break;
+        case 'PRE': add('req_clearance', L('Demander la clearance', 'Request clearance'), true); break;
         case 'CLEARED': add('req_push', L('Repoussage + mise en route', 'Push-back + start-up'), true); add('req_start', L('Mise en route seule', 'Start-up only')); break;
         case 'STARTUP': add('req_taxi', L('Prêt à rouler', 'Ready to taxi'), true); break;
         case 'TAXI_OUT': if (this.crossAhead()) add('cross_req', this.crossLabel(), true); add('at_holding', L("Au point d'arrêt", 'At holding point'), !this.crossAhead()); break;
@@ -871,7 +873,7 @@
       const a = this.curAlt();
       switch (id) {
         case 'readback': return this.pending && this.pending.readback;
-        case 'req_clearance': return this.M(st, ',', cs, ',', this.T('bonjour, demande clairance IFR pour', 'request IFR clearance to'), { text: f.arr.city, speech: f.arr.city }, ',', this.T('information', 'information'), this.atisLetter('dep'));
+        case 'req_clearance': return this.M(st, ',', cs, ',', this.T('bonjour, demande clearance IFR pour', 'request IFR clearance to'), { text: f.arr.city, speech: f.arr.city }, ',', this.T('information', 'information'), this.atisLetter('dep'));
         case 'req_push': return this.M(st, ',', cs, ',', this.T('demande repoussage et mise en route', 'request push-back and start-up'));
         case 'req_start': return this.M(st, ',', cs, ',', this.T('demande mise en route', 'request start-up'));
         case 'req_taxi': return this.M(st, ',', cs, ',', this.T('prêt à rouler', 'ready to taxi'));

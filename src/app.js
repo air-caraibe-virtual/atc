@@ -799,7 +799,7 @@
     const dep = open(res.dep), arr = open(res.arr);
     if (dep.length) a.rwyTakeoff = dep[0];
     if (arr.length) a.rwyLand = arr[0];
-    // la piste du joueur : départ au départ (avant la clairance), atterrissage à l'arrivée (avant l'approche)
+    // la piste du joueur : départ au départ (avant la clearance), atterrissage à l'arrivée (avant l'approche)
     const before = a.rwy;
     if (side === 'dep' && dep.length && engine.phase === 'PRE') {
       // plusieurs pistes de départ : la plus proche de l'avion
@@ -945,7 +945,7 @@
     else if (!demo && simStatus === 'connected') addMessage({ from: 'system', text: `Trafic réel : MSFS n'a renvoyé aucun avion (${total} au total). Nouvel essai dans 30 s.` });
   };
   engine.traffic = traffic;
-  // repoussage automatique avec le tracteur de MSFS, une fois la clairance collationnée
+  // repoussage automatique avec le tracteur de MSFS, une fois la clearance collationnée
   engine.onPush = (face) => {
     if (!S.autoPush || demo || !api || !api.pushback || simStatus !== 'connected') return;
     const t = currentTel();

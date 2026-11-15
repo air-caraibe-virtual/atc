@@ -1,5 +1,5 @@
 /* ATC — simulateur de démonstration : fait voler un avion fictif
-   qui suit les clairances, pour essayer le logiciel sans MSFS. */
+   qui suit les clearances, pour essayer le logiciel sans MSFS. */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory(require('./engine.js'));
   else root.DemoSim = factory(root.ATC);

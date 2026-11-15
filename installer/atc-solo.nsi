@@ -50,7 +50,7 @@ VIAddVersionKey /LANG=1036 "LegalCopyright" "© 2026 ATC"
 
 ; Pages
 !define MUI_WELCOMEPAGE_TITLE "Bienvenue dans l'installation d'ATC"
-!define MUI_WELCOMEPAGE_TEXT "ATC est un contrôleur aérien vocal pour Microsoft Flight Simulator 2024.$\r$\n$\r$\nIl vous guide de la clairance jusqu'au parking : vraies fréquences, phraséologie française ou anglaise, pistes réellement en service, trafic réel et carte de votre route.$\r$\n$\r$\nCliquez sur Suivant pour continuer."
+!define MUI_WELCOMEPAGE_TEXT "ATC est un contrôleur aérien vocal pour Microsoft Flight Simulator 2024.$\r$\n$\r$\nIl vous guide de la clearance jusqu'au parking : vraies fréquences, phraséologie française ou anglaise, pistes réellement en service, trafic réel et carte de votre route.$\r$\n$\r$\nCliquez sur Suivant pour continuer."
 !insertmacro MUI_PAGE_WELCOME
 ; Présentation d'ATC (4 pages illustrées)
 Page custom Slide1

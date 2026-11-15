@@ -1,6 +1,6 @@
 # ATC — contrôle aérien vocal pour Microsoft Flight Simulator 2024
 
-ATC vous guide de la clairance jusqu'au parking, à la voix : vraies fréquences, phraséologie
+ATC vous guide de la clearance jusqu'au parking, à la voix : vraies fréquences, phraséologie
 française ou anglaise, pistes réellement en service, trafic réel et carte de votre route.
 
 ## Télécharger
