@@ -621,25 +621,50 @@ ipcMain.handle('update-check', async (_e, beta) => {
 ipcMain.handle('update-install', async (_e, url, version) => {
   if (!/^https:\/\/github\.com\/|^https:\/\/objects\.githubusercontent\.com\//.test(url)) return { ok: false, error: 'adresse refusée' };
   const os = require('os');
-  const file = path.join(os.tmpdir(), `ATC-Setup-${String(version).replace(/[^0-9a-z.\-]/gi, '')}.exe`);
+  // nom unique : un ancien installateur encore ouvert/verrouillé ne bloque pas le nouveau
+  const file = path.join(os.tmpdir(), `ATC-Setup-${String(version).replace(/[^0-9a-z.\-]/gi, '')}-${Date.now()}.exe`);
   try {
     const r = await net.fetch(url, { headers: { 'User-Agent': 'ATC-MSFS' } });
     if (!r.ok || !r.body) throw new Error('HTTP ' + r.status);
     const total = +r.headers.get('content-length') || 0;
     const out = fs.createWriteStream(file);
+    const closed = new Promise((res, rej) => { out.on('close', res); out.on('error', rej); });
     const reader = r.body.getReader();
     let got = 0, lastSent = 0;
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
-      out.write(Buffer.from(value)); got += value.length;
+      if (!out.write(Buffer.from(value))) await new Promise((res) => out.once('drain', res));
+      got += value.length;
       if (Date.now() - lastSent > 200) { lastSent = Date.now(); send('update-progress', { got, total }); }
     }
-    await new Promise((res) => out.end(res));
+    out.end();
+    await closed; // fichier réellement fermé (pas seulement « fini d'écrire »)
+    if (total && fs.statSync(file).size !== total) throw new Error('téléchargement incomplet, réessayez');
     send('update-progress', { got, total, done: true });
-    // installation silencieuse, puis ATC se relance tout seul (option /UPDATE de l'installateur)
+    // Installation silencieuse puis relance (option /UPDATE de l'installateur).
+    // Windows (antivirus, indexation) peut verrouiller l'exe quelques secondes juste après le
+    // téléchargement : on réessaie au lieu d'échouer sur « spawn EBUSY ».
     const { spawn } = require('child_process');
-    spawn(file, ['/S', '/UPDATE'], { detached: true, stdio: 'ignore' }).unref();
+    const launch = () => new Promise((res, rej) => {
+      let child;
+      try { child = spawn(file, ['/S', '/UPDATE'], { detached: true, stdio: 'ignore' }); } catch (e) { return rej(e); }
+      child.once('error', rej);
+      child.once('spawn', () => { child.unref(); res(); });
+    });
+    let lastErr = null;
+    for (let i = 0; i < 12; i++) {
+      try { await launch(); lastErr = null; break; } catch (e) {
+        lastErr = e;
+        if (!/EBUSY|EPERM|EACCES|ETXTBSY/i.test(String(e.code || e.message))) break;
+        await new Promise((res) => setTimeout(res, 1500));
+      }
+    }
+    if (lastErr) {
+      // dernier recours : ouvrir l'installateur normalement (avec ses pages)
+      const err = await shell.openPath(file);
+      if (err) throw lastErr;
+    }
     setTimeout(() => app.quit(), 800);
     return { ok: true };
   } catch (e) { return { ok: false, error: String(e.message || e) }; }
