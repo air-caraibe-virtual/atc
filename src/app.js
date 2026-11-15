@@ -6,7 +6,7 @@
   const api = window.sim || null; // absent si la page est ouverte hors de l'appli
 
   // ---------- Paramètres ----------
-  const DEFAULTS = { lang: 'fr', ttsEngine: 'neural', neuralVoice: 'auto', voice: '', rate: 1.05, volume: 1, radioFx: 'medium', squelch: true, pilotVoice: false, requireCom: false, autoCom: true, autoXpdr: true, autoReadback: true, autoPush: true, traffic: false, sbUser: '', mute: false, radioMode: 'auto', mic: false, micKey: 'Ctrl+Space', micModel: 'small', aiProvider: '', aiKey: '', aiModel: '', trafficMax: 16, v: 5 };
+  const DEFAULTS = { lang: 'fr', ttsEngine: 'neural', neuralVoice: 'auto', voice: '', rate: 1.05, volume: 1, radioFx: 'medium', squelch: true, pilotVoice: false, requireCom: false, autoCom: true, autoXpdr: true, autoReadback: true, autoPush: true, traffic: false, sbUser: '', mute: false, radioMode: 'auto', mic: false, micKey: 'Ctrl+Space', micModel: 'small', aiProvider: 'company', aiKey: '', aiModel: '', trafficMax: 16, v: 6 };
   let S = { ...DEFAULTS };
   let stored = {};
   try { stored = JSON.parse(localStorage.getItem('atcsolo') || '{}') || {}; S = { ...DEFAULTS, ...stored }; } catch (_) {}
@@ -15,6 +15,8 @@
   if ((stored.v || 1) < 4) { S.radioMode = 'auto'; S.v = 4; try { localStorage.setItem('atcsolo', JSON.stringify(S)); } catch (_) {} }
   // v5 : plus d'avions par défaut (16 au lieu de 8)
   if ((stored.v || 1) < 5) { if (!stored.trafficMax || stored.trafficMax <= 8) S.trafficMax = 16; S.v = 5; try { localStorage.setItem('atcsolo', JSON.stringify(S)); } catch (_) {} }
+  // v6 : l'IA de la compagnie est activée par défaut (gratuite, rien à régler)
+  if ((stored.v || 1) < 6) { if (!stored.aiProvider) S.aiProvider = 'company'; S.v = 6; try { localStorage.setItem('atcsolo', JSON.stringify(S)); } catch (_) {} }
   S.lang = S.radioMode === 'en' ? 'en' : 'fr'; // langue de l'interface
   const save = () => { try { localStorage.setItem('atcsolo', JSON.stringify(S)); } catch (_) {} };
 
