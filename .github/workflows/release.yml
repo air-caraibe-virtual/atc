@@ -20,32 +20,43 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Installer les dépendances
-        run: npm ci
       - name: Lire la version
         id: v
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           V=$(node -p "require('./package.json').version")
+          # version déjà publiée (package.json modifié sans changer de numéro) : on ne touche à rien
+          if gh release view "v$V" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then echo "skip=true" >> "$GITHUB_OUTPUT"; echo "v$V existe déjà : rien à publier"; exit 0; fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
           echo "version=$V" >> "$GITHUB_OUTPUT"
           echo "numver=${V%%-*}" >> "$GITHUB_OUTPUT"
           if [[ "$V" == *-* ]]; then echo "pre=true" >> "$GITHUB_OUTPUT"; echo "Pré-version bêta $V"; else echo "pre=false" >> "$GITHUB_OUTPUT"; echo "Version officielle $V"; fi
           if [ ! -f "notes/$V.md" ]; then echo "Il manque notes/$V.md (ce que les pilotes verront : ajouts, corrections, retraits)"; exit 1; fi
+      - name: Installer les dépendances
+        if: steps.v.outputs.skip != 'true'
+        run: npm ci
       - name: Fabriquer l'application
+        if: steps.v.outputs.skip != 'true'
         run: npx electron-builder --win dir --x64 --publish never
       - name: Icône et version dans ATC.exe
+        if: steps.v.outputs.skip != 'true'
         run: node build/rcedit.js
       - name: Installer NSIS
+        if: steps.v.outputs.skip != 'true'
         shell: pwsh
         run: |
           if (-not (Test-Path "C:\Program Files (x86)\NSIS\makensis.exe")) { choco install nsis -y --no-progress }
           Test-Path "C:\Program Files (x86)\NSIS\makensis.exe"
       - name: Fabriquer l'installateur
+        if: steps.v.outputs.skip != 'true'
         shell: bash
         run: |
           cd installer
           "/c/Program Files (x86)/NSIS/makensis.exe" -INPUTCHARSET UTF8 -V2 -DVERSION="${{ steps.v.outputs.version }}" -DNUMVER="${{ steps.v.outputs.numver }}" atc-solo.nsi
       - name: Publier la version
+        if: steps.v.outputs.skip != 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.v.outputs.version }}
