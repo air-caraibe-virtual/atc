@@ -1,7 +1,7 @@
 {
   "name": "atc-solo",
   "productName": "ATC",
-  "version": "0.2.3-beta.10",
+  "version": "0.2.3-beta.11",
   "description": "ATC — contrôle aérien vocal pour Microsoft Flight Simulator 2024",
   "main": "main.js",
   "author": "ATC",
