@@ -29,6 +29,7 @@
       "main.js",
       "preload.js",
       "stt.js",
+      "llm.js",
       "src/**/*",
       "package.json",
       "build/icon.png",

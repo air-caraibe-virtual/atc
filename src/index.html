@@ -234,11 +234,13 @@
       <label class="check"><input type="checkbox" id="setAutoRb"> <span>Collationner automatiquement les instructions</span></label>
       <div class="ai-box">
         <b>Intelligence artificielle (facultatif)</b>
-        <small>Comprend tout ce que vous dites, répond comme un vrai contrôleur, gère les urgences et joue le copilote. Utilise votre propre clé API : elle reste sur votre PC, chaque message coûte une fraction de centime (Groq a un accès gratuit limité).</small>
-        <label><span>Fournisseur</span><select id="setAiProvider"><option value="">Désactivée</option><option value="anthropic">Claude (Anthropic)</option><option value="openai">OpenAI</option><option value="groq">Groq (accès gratuit limité)</option></select></label>
-        <div class="ai-help-row"><button id="btnAiHelp" class="primary mini">❓ Comment obtenir et ajouter ma clé (3 minutes)</button></div>
-        <label><span>Clé API</span><span class="ai-key-row"><input id="setAiKey" type="password" autocomplete="off" placeholder="Collez votre clé ici"><button id="btnAiPaste" class="mini ghost" title="Coller la clé copiée">📋 Coller</button></span></label>
-        <label><span>Modèle (laisser vide = conseillé)</span><input id="setAiModel" type="text" autocomplete="off" placeholder=""></label>
+        <small>Comprend tout ce que vous dites, répond comme un vrai contrôleur, gère les urgences et joue le copilote. Au choix : l'IA intégrée (gratuite, sans compte, sur votre PC), Ollama (gros PC), ou une IA en ligne avec votre propre clé (Groq gratuit, Claude ou OpenAI payants à la fraction de centime).</small>
+        <label><span>Fournisseur</span><select id="setAiProvider"><option value="">Désactivée</option><option value="local">IA intégrée — gratuite, sans compte, sur le PC (≈ 1 Go)</option><option value="ollama">Ollama — gratuit, pour gros PC (carte graphique 12 Go+)</option><option value="groq">Groq — gratuit avec un compte (clé)</option><option value="anthropic">Claude — le plus malin (clé payante)</option><option value="openai">OpenAI (clé payante)</option></select></label>
+        <div id="aiLocalBox" class="ai-sub hidden"><small>Tourne entièrement sur votre PC, hors ligne. Comprend très bien les demandes, répond plus simplement qu'une IA en ligne. 2 à 5 secondes par message, 16 Go de mémoire conseillés.</small><div class="ai-test"><button id="btnAiLocal" class="mini">Préparer l'IA intégrée</button><span id="aiLocalState"></span></div></div>
+        <div id="aiOllamaBox" class="ai-sub hidden"><small>Ollama est un logiciel gratuit qui fait tourner de grosses IA sur votre carte graphique (attention à la mémoire vidéo utilisée par MSFS).</small><div class="ai-test"><button id="btnOllama" class="mini">Détecter Ollama</button><span id="aiOllamaState"></span></div></div>
+        <div class="ai-help-row ai-key-only"><button id="btnAiHelp" class="primary mini">❓ Comment obtenir et ajouter ma clé (3 minutes)</button></div>
+        <label class="ai-key-only"><span>Clé API</span><span class="ai-key-row"><input id="setAiKey" type="password" autocomplete="off" placeholder="Collez votre clé ici"><button id="btnAiPaste" class="mini ghost" title="Coller la clé copiée">📋 Coller</button></span></label>
+        <label id="setAiModelRow"><span>Modèle (laisser vide = conseillé)</span><input id="setAiModel" type="text" autocomplete="off" placeholder=""></label>
         <div class="ai-test"><button id="btnAiTest" class="mini">Tester la clé</button><span id="aiTestRes"></span></div>
       </div>
       <label class="check"><input type="checkbox" id="setMic"> <span>Parler au micro (reconnaissance vocale sur le PC, modèle téléchargé une seule fois)</span></label>

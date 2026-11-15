@@ -496,11 +496,18 @@
     addMessage({ from: 'system', text: 'Micro : rien entendu.' });
   }
   // ---------- IA (facultative, clé API du pilote) ----------
-  const aiOn = () => !!(S.aiProvider && S.aiKey && api && api.aiChat && window.AtcAI);
+  const aiOn = () => !!(S.aiProvider && window.AtcAI && api && api.aiChat && (S.aiKey || (AtcAI.PROVIDERS[S.aiProvider] || {}).noKey) && (S.aiProvider !== 'local' || aiLocalReady));
+  let aiLocalReady = false, aiLocalBusy = false;
   function aiHint() {
     const p = window.AtcAI && AtcAI.PROVIDERS[S.aiProvider];
     if ($('setAiModel')) $('setAiModel').placeholder = p ? p.model : '';
     if ($('setAiKey')) $('setAiKey').placeholder = p ? p.keyHint : 'Choisissez d\'abord un fournisseur';
+    // pas de clé pour l'IA intégrée et Ollama
+    const noKey = !!(p && p.noKey);
+    document.querySelectorAll('.ai-key-only').forEach((el) => el.classList.toggle('hidden', noKey));
+    if ($('aiLocalBox')) $('aiLocalBox').classList.toggle('hidden', S.aiProvider !== 'local');
+    if ($('aiOllamaBox')) $('aiOllamaBox').classList.toggle('hidden', S.aiProvider !== 'ollama');
+    if ($('setAiModelRow')) $('setAiModelRow').classList.toggle('hidden', S.aiProvider === 'local');
     $('freeBar') && $('freeBar').classList.toggle('hidden', !aiOn() && !engine.flight);
   }
   async function aiAsk(system, messages, maxTokens) {
@@ -513,7 +520,7 @@
     const copilot = mode === 'copilot' || /^\s*(co-?pilote?|copilot)\b/i.test(said);
     const ctx = AtcAI.context(engine, engine.flight ? null : { note: 'no flight plan loaded yet' }) || { note: 'no flight plan loaded yet' };
     if (detected) ctx.detected_language = detected;
-    const { system, messages } = AtcAI.buildMessages(ctx, said, copilot ? 'copilot' : 'atc', radioHist);
+    const { system, messages } = AtcAI.buildMessages(ctx, said, copilot ? 'copilot' : 'atc', radioHist, !!(AtcAI.PROVIDERS[S.aiProvider] || {}).compact);
     aiBusy = true; render();
     let r; try { r = await aiAsk(system, messages); } catch (e) { r = { ok: false, error: e.message }; }
     aiBusy = false; render();
@@ -591,6 +598,32 @@
     document.querySelectorAll('#dlgAiHelp .ai-steps').forEach((o) => o.classList.toggle('hidden', o.dataset.p !== b.dataset.p));
   }));
   document.querySelectorAll('#dlgAiHelp [data-url]').forEach((b) => (b.onclick = () => { if (api && api.openUrl) api.openUrl(b.dataset.url); else window.open(b.dataset.url); }));
+  // ---- IA intégrée : préparation (téléchargement unique ≈ 1 Go) ----
+  async function aiPrepareLocal(manual) {
+    if (aiLocalReady || aiLocalBusy || !api || !api.aiPrepareLocal) return;
+    aiLocalBusy = true; $('aiLocalState').textContent = 'Préparation… (premier lancement : téléchargement d\'environ 1 Go, une seule fois)';
+    const r = await api.aiPrepareLocal();
+    aiLocalBusy = false;
+    if (r && r.ok) { aiLocalReady = true; $('aiLocalState').textContent = '✅ IA intégrée prête (' + String(r.model || '').split('/').pop() + ')'; if (manual !== false) addMessage({ from: 'system', text: 'IA intégrée prête : parlez librement au contrôleur ou au copilote.' }); }
+    else $('aiLocalState').textContent = '❌ ' + ((r && r.error) || 'erreur') + ' — vérifiez la connexion Internet pour le premier téléchargement.';
+    render();
+  }
+  if (api && api.onAiProgress) api.onAiProgress((p) => { if (p && p.total && $('aiLocalState') && aiLocalBusy) $('aiLocalState').textContent = `Téléchargement de l'IA intégrée : ${Math.round(p.loaded / p.total * 100)} %`; });
+  $('btnAiLocal').onclick = () => aiPrepareLocal(true);
+  // ---- Ollama : détection et choix du modèle ----
+  async function ollamaDetect() {
+    const out = $('aiOllamaState');
+    out.textContent = 'Recherche d\'Ollama…';
+    const r = api && api.ollamaTags ? await api.ollamaTags() : null;
+    if (!r || !r.ok) { out.innerHTML = '❌ Ollama n\'est pas lancé sur ce PC. <a href="#" id="lnkOllama">Télécharger Ollama</a>, installez-le, puis tapez dans un terminal : <code>ollama pull qwen2.5:7b</code>'; const l = $('lnkOllama'); if (l) l.onclick = (e) => { e.preventDefault(); api.openUrl('https://ollama.com/download'); }; return; }
+    if (!r.models.length) { out.innerHTML = '⚠️ Ollama est lancé mais n\'a aucun modèle. Tapez dans un terminal : <code>ollama pull qwen2.5:7b</code>'; return; }
+    const pref = ['qwen2.5:7b', 'qwen2.5', 'llama3.1:8b', 'llama3.1', 'mistral', 'gemma2'];
+    let pick = null; for (const p of pref) { pick = r.models.find((m) => m.startsWith(p)); if (pick) break; } pick = pick || r.models[0];
+    if (!S.aiModel || !r.models.includes(S.aiModel)) { S.aiModel = pick; save(); $('setAiModel').value = pick; }
+    out.textContent = `✅ Ollama détecté — modèles : ${r.models.join(', ')} (utilisé : ${S.aiModel})`;
+    render();
+  }
+  $('btnOllama').onclick = ollamaDetect;
   $('btnAiTest').onclick = async () => {
     const out = $('aiTestRes');
     if (!aiOn()) { out.textContent = 'Choisissez un fournisseur et collez une clé.'; return; }
@@ -648,6 +681,7 @@
     engine.pilotAction(best.id, best.needsLevel ? level : undefined);
   }
   setTimeout(() => { if (S.mic) micSetup(); }, 1500);
+  setTimeout(() => { if (S.aiProvider === 'local') aiPrepareLocal(false); }, 2500); // IA intégrée : rechargée au démarrage (déjà téléchargée)
   window.__atcSpeech = handleSpeech;
 
   // ---------- Commandes vers le simulateur ----------
@@ -851,7 +885,7 @@
   bindSetting('setCom', 'requireCom', (e) => e.checked);
   bindSetting('setAutoCom', 'autoCom', (e) => { autoTune.tries = 0; autoTune.warned = false; return e.checked; });
   bindSetting('setAutoRb', 'autoReadback', (e) => { $('chkAutoRb').checked = e.checked; return e.checked; });
-  bindSetting('setAiProvider', 'aiProvider', (e) => { setTimeout(aiHint); return e.value; });
+  bindSetting('setAiProvider', 'aiProvider', (e) => { setTimeout(() => { aiHint(); if (e.value === 'local') aiPrepareLocal(true); if (e.value === 'ollama') ollamaDetect(); }); if (e.value === 'local' || e.value === 'ollama') { S.aiModel = ''; $('setAiModel').value = ''; } return e.value; });
   bindSetting('setAiKey', 'aiKey', (e) => { setTimeout(aiHint); return e.value.trim().replace(/\s+/g, ''); });
   bindSetting('setAiModel', 'aiModel', (e) => e.value.trim());
   bindSetting('setMic', 'mic', (e) => { setTimeout(micSetup); return e.checked; });

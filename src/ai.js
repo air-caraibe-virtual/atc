@@ -7,6 +7,8 @@
   'use strict';
 
   const PROVIDERS = {
+    local: { name: 'IA intégrée (gratuite, sur le PC)', model: '', keyHint: '', noKey: true, compact: true },
+    ollama: { name: 'Ollama (gros PC)', model: 'qwen2.5:7b', keyHint: '', noKey: true },
     anthropic: { name: 'Claude (Anthropic)', model: 'claude-haiku-5-5', keyHint: 'sk-ant-…' },
     openai: { name: 'OpenAI', model: 'gpt-4o-mini', keyHint: 'sk-…' },
     groq: { name: 'Groq (accès gratuit limité)', model: 'llama-3.3-70b-versatile', keyHint: 'gsk_…' },
@@ -59,7 +61,25 @@ Rules:
 - Controller replies start with the callsign telephony, use real ICAO phraseology, are short (one radio transmission), never invent a clearance that changes the flight (runway, level, frequency) unless the pilot requested something the controller can grant (then grant it plainly). Never say you are an AI.
 - Stay realistic for the current phase and station.`;
 
-  function buildMessages(ctx, said, mode, history) {
+  // Version courte pour l'IA intégrée (petit modèle, plus lent à lire de longs textes)
+  const SYSTEM_COMPACT = `You are an air traffic control assistant. Read the pilot message (it may be badly transcribed) and answer ONLY one JSON object:
+- matches one of the REQUESTS: {"type":"action","action":"<id>","lang":"<en|fr|es|de|it|pt>","level":<feet or null>}
+- other radio message to ATC: {"type":"reply","lang":"<xx>","pilot":"<clean message>","atc":"<short ICAO controller reply starting with the callsign>"}
+- distress or urgency (mayday, pan-pan, engine failure, fire, medical): {"type":"emergency","kind":"mayday|panpan","lang":"<xx>","pilot":"<clean message>","atc":"<short reply giving priority>"}
+- question for the copilot: {"type":"copilot","answer":"<short answer in French>"}
+- not understandable: {"type":"say_again","lang":"<xx>"}
+"lang" = language the pilot spoke. Write "pilot" and "atc" in that language.`;
+  function compactUser(ctx, said, mode) {
+    const reqs = (ctx.available_requests || []).map((a) => `- ${a.id}: "${a.example || a.label}"${a.levels ? ' levels: ' + a.levels.join(',') : ''}`).join('\n');
+    return `Callsign: ${ctx.callsign} (${ctx.telephony}). Station: ${ctx.station ? ctx.station.name : '-'}. Phase: ${ctx.phase}. From ${ctx.departure ? ctx.departure.icao : '-'} to ${ctx.arrival ? ctx.arrival.icao : '-'}.${ctx.pending_readback ? '\nReadback expected: "' + ctx.pending_readback + '"' : ''}
+REQUESTS:
+${reqs || '(none)'}
+
+${mode === 'copilot' ? 'Message to the COPILOT' : 'Pilot message'}: ${said}`;
+  }
+
+  function buildMessages(ctx, said, mode, history, compact) {
+    if (compact) return { system: SYSTEM_COMPACT, messages: [{ role: 'user', content: compactUser(ctx, said, mode) }] };
     const h = (history || []).slice(-8).map((m) => `${m.from}: ${m.text}`).join('\n');
     const user = `Flight context:\n${JSON.stringify(ctx)}\n\nRecent radio:\n${h || '(none)'}\n\n${mode === 'copilot' ? 'Message to the COPILOT' : 'Pilot message'}: ${said}`;
     return { system: SYSTEM, messages: [{ role: 'user', content: user }] };

@@ -743,8 +743,37 @@ ipcMain.handle('update-install', async (_e, url, version) => {
 });
 
 // ---------- IA (clé API du pilote) : Claude, OpenAI ou Groq ----------
+// IA intégrée (sur le PC) et Ollama (logiciel gratuit à installer, pour les gros PC)
+const llmDir = () => path.join(app.getPath('userData'), 'models');
+ipcMain.handle('ai-prepare-local', async () => {
+  try { await require('./llm.js').load(llmDir(), (p) => send('ai-progress', p)); send('ai-progress', { done: true }); return { ok: true, model: require('./llm.js').model() }; }
+  catch (e) { return { ok: false, error: String(e.message || e) }; }
+});
+ipcMain.handle('ollama-tags', async () => {
+  try {
+    const r = await net.fetch('http://127.0.0.1:11434/api/tags');
+    if (!r.ok) return { ok: false };
+    const j = await r.json();
+    return { ok: true, models: (j.models || []).map((m) => m.name) };
+  } catch (_) { return { ok: false }; }
+});
 ipcMain.handle('ai-chat', async (_e, o) => {
   const { provider, key, model, system, messages, maxTokens } = o || {};
+  if (provider === 'local') {
+    try { return { ok: true, text: await require('./llm.js').chat(llmDir(), system, messages, maxTokens, (p) => send('ai-progress', p)) }; }
+    catch (e) { return { ok: false, error: 'IA intégrée : ' + String(e.message || e) }; }
+  }
+  if (provider === 'ollama') {
+    try {
+      const r = await net.fetch('http://127.0.0.1:11434/api/chat', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ model, stream: false, format: 'json', options: { temperature: 0.2, num_predict: maxTokens || 400 }, messages: [{ role: 'system', content: system }, ...messages] }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) return { ok: false, error: 'Ollama : ' + (j.error || ('HTTP ' + r.status)) };
+      return { ok: true, text: (j.message && j.message.content) || '' };
+    } catch (e) { return { ok: false, error: 'Ollama ne répond pas (est-il lancé ?)' }; }
+  }
   if (!key) return { ok: false, error: 'Aucune clé API dans les paramètres.' };
   const ctl = new AbortController(); const to = setTimeout(() => ctl.abort(), 20000);
   try {
