@@ -886,7 +886,7 @@
   bindSetting('setCom', 'requireCom', (e) => e.checked);
   bindSetting('setAutoCom', 'autoCom', (e) => { autoTune.tries = 0; autoTune.warned = false; return e.checked; });
   bindSetting('setAutoRb', 'autoReadback', (e) => { $('chkAutoRb').checked = e.checked; return e.checked; });
-  bindSetting('setAiProvider', 'aiProvider', (e) => { setTimeout(() => { aiHint(); if (e.value === 'local') aiPrepareLocal(true); if (e.value === 'ollama') ollamaDetect(); }); if (e.value === 'local' || e.value === 'ollama') { S.aiModel = ''; $('setAiModel').value = ''; } return e.value; });
+  bindSetting('setAiProvider', 'aiProvider', (e) => { setTimeout(() => { aiHint(); if (e.value === 'local') aiPrepareLocal(true); if (e.value === 'ollama') ollamaDetect(); }); if (e.value !== S.aiProvider) { S.aiModel = ''; $('setAiModel').value = ''; } /* nouveau fournisseur : modèle conseillé */ return e.value; });
   bindSetting('setAiKey', 'aiKey', (e) => { setTimeout(aiHint); return e.value.trim().replace(/\s+/g, ''); });
   bindSetting('setAiModel', 'aiModel', (e) => e.value.trim());
   bindSetting('setMic', 'mic', (e) => { setTimeout(micSetup); return e.checked; });
