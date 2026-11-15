@@ -380,7 +380,7 @@ ipcMain.handle('live-flights', async (_e, lat, lon) => {
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
   const key = lat.toFixed(2) + ',' + lon.toFixed(2);
   if (liveCache.key === key && Date.now() - liveCache.at < 80000) return liveCache.list;
-  const dLat = 1.0, dLon = 1.0 / Math.max(0.3, Math.cos(lat * Math.PI / 180));
+  const dLat = 2.0, dLon = Math.min(2.8, 2.0 / Math.max(0.3, Math.cos(lat * Math.PI / 180))); // ≈ 120 NM autour (moins de 25 degrés² : 1 seul crédit OpenSky)
   const url = `https://opensky-network.org/api/states/all?lamin=${(lat - dLat).toFixed(3)}&lomin=${(lon - dLon).toFixed(3)}&lamax=${(lat + dLat).toFixed(3)}&lomax=${(lon + dLon).toFixed(3)}`;
   try {
     const r = await net.fetch(url, { headers: { 'User-Agent': 'ATC-MSFS/1.7' } });

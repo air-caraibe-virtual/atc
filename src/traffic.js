@@ -179,7 +179,7 @@
         this.nextSpawn = now + 4000;
         const cands = this.live.filter((f) => !f.onGround && f.cs && /^[A-Z]{3}\d/.test(f.cs) && !this.used.has(f.cs) && f.alt != null && f.alt > 3000 && f.track != null)
           .map((f) => ({ ...f, d: distNm(f, tel) }))
-          .filter((f) => f.d < 40 && (tel.alt == null || Math.abs(f.alt - tel.alt) < 15000))
+          .filter((f) => f.d < 80 && (tel.alt == null || Math.abs(f.alt - tel.alt) < 20000))
           .sort((x, y) => x.d - y.d);
         for (let i = 0; i < 2 && cands.length && this.list().length < this.max; i++) this.spawnEnroute(cands.shift());
       }
@@ -236,7 +236,7 @@
       const turn = dt > 0 ? ((((a.hdg - prevHdg + 540) % 360) - 180) / dt) : 0;
       a.bank = Math.max(-25, Math.min(25, -turn * 8));
       // trop loin, ou plus de nouvelles du vol réel depuis 4 minutes
-      if (distNm(a.pos, tel) > 50 || this.now - a.seen > 240000) a.state = 'gone';
+      if (distNm(a.pos, tel) > 90 || this.now - a.seen > 240000) a.state = 'gone';
     }
     // Info trafic : avion proche (moins de 8 NM, moins de 2 500 ft d'écart) qui se rapproche, pas encore annoncé
     trafficInfo(tel) {
@@ -286,9 +286,9 @@
       for (const f of this.live || []) {
         if (this.used.has(f.cs) || !/^[A-Z]{3}\d/.test(f.cs)) continue;
         const d = distNm(f, ap);
-        if (!f.onGround && d > 4 && d < 80 && (f.alt == null || f.alt - ctx.elev < 18000) && f.track != null && angDiff(f.track, bearing(f, ap)) < 80 && f.vs <= 500) out.arr.push({ ...f, d });
-        else if (f.onGround && d < 3 && f.kts > 3) out.dep.push({ ...f, d });
-        else if (f.onGround && d < 3) out.park.push({ ...f, d });
+        if (!f.onGround && d > 4 && d < 120 && (f.alt == null || f.alt - ctx.elev < 30000) && f.track != null && angDiff(f.track, bearing(f, ap)) < 80 && f.vs <= 500) out.arr.push({ ...f, d });
+        else if (f.onGround && d < 4 && f.kts > 3) out.dep.push({ ...f, d });
+        else if (f.onGround && d < 4) out.park.push({ ...f, d });
       }
       out.arr.sort((x, y) => x.d - y.d);
       return out;
@@ -466,7 +466,7 @@
             a.alt += (2400 / 60) * dt;
             if (a.alt - ctx.elev > 400) a.gear = false;
             if (!a.handedOff && distNm(a.pos, ctx.th) > 3) { a.handedOff = true; this.radio(a, 'TWR', 'depart'); }
-            if (distNm(a.pos, ctx.th) > 10 || a.alt - ctx.elev > 7000) a.state = 'gone';
+            if (distNm(a.pos, ctx.th) > 25 || a.alt - ctx.elev > 12000) a.state = 'gone';
           }
           a.pos = move(a.pos, a.hdg, a.v * KT * dt);
           break;
