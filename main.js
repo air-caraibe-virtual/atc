@@ -756,14 +756,26 @@ ipcMain.handle('stt-transcribe', async (_e, samples, langs) => {
     return { ok: true, ...r };
   } catch (e) { return { ok: false, error: String(e.message || e) }; }
 });
-// raccourci global (fonctionne même quand MSFS a le focus) : appui = parler, nouvel appui = fin
-let micKey = null;
+// raccourci global (fonctionne même quand MSFS a le focus).
+// Windows répète la touche tant qu'on la maintient : on transforme ces répétitions en
+// « appui » (début) puis « relâché » (fin) au lieu d'allumer / éteindre le micro en boucle.
+//  - appui bref : on parle, ATC coupe tout seul après un silence (ou nouvel appui)
+//  - touche maintenue : on parle tant qu'elle est enfoncée (alternat)
+let micKey = null, micLast = 0, micHeld = false, micRelTimer = null;
+function micKeyEvent() {
+  const now = Date.now(), gap = now - micLast;
+  micLast = now;
+  if (gap > 700) { micHeld = false; send('mic-press'); }   // nouvel appui
+  else if (!micHeld) { micHeld = true; send('mic-hold'); } // la touche est maintenue
+  clearTimeout(micRelTimer);
+  if (micHeld) micRelTimer = setTimeout(() => { micHeld = false; send('mic-release'); }, 250); // plus de répétition : relâchée
+}
 ipcMain.handle('mic-shortcut', (_e, accel) => {
   try { if (micKey) globalShortcut.unregister(micKey); } catch (_) {}
   micKey = null;
   if (!accel) return { ok: true };
   try {
-    const ok = globalShortcut.register(accel, () => send('mic-toggle'));
+    const ok = globalShortcut.register(accel, micKeyEvent);
     if (ok) micKey = accel;
     return { ok };
   } catch (e) { return { ok: false, error: String(e.message || e) }; }
@@ -776,7 +788,7 @@ function createWindow() {
     width: 1180, height: 820, minWidth: 900, minHeight: 640,
     backgroundColor: '#0b1220', title: 'ATC', autoHideMenuBar: true,
     icon: path.join(__dirname, 'build', 'icon.png'),
-    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false },
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, backgroundThrottling: false },
   });
   win.setMenuBarVisibility(false);
   win.loadFile(path.join(__dirname, 'src', 'index.html'));

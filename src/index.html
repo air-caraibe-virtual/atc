@@ -189,8 +189,9 @@
       <label class="check"><input type="checkbox" id="setFsltl"> <span>Utiliser les avions FSLTL en priorité pour le trafic réel</span></label>
       <label class="check"><input type="checkbox" id="setAutoRb"> <span>Collationner automatiquement les instructions</span></label>
       <label class="check"><input type="checkbox" id="setMic"> <span>Parler au micro (reconnaissance vocale sur le PC, modèle de 80 Mo téléchargé une fois)</span></label>
-      <label><span>Touche du micro (marche aussi dans MSFS)</span>
-        <select id="setMicKey"><option value="">Aucune (bouton dans ATC)</option><option value="Ctrl+Space">Ctrl + Espace</option><option value="F9">F9</option><option value="F10">F10</option><option value="F11">F11</option><option value="Ctrl+Alt+M">Ctrl + Alt + M</option><option value="Ctrl+Shift+T">Ctrl + Maj + T</option></select></label>
+      <div class="ptt-row"><span>Touche du micro / alternat (clavier ou bouton de joystick, marche aussi dans MSFS)</span>
+        <div class="ptt-ctl"><span id="pttLabel" class="ptt-key">—</span><button id="btnPttDetect" class="mini">Détecter</button><button id="btnPttClear" class="mini ghost">Aucune</button></div>
+        <small id="pttHint" class="ptt-hint"></small></div>
       <label class="check"><input type="checkbox" id="setAutoPush"> <span>Repoussage automatique avec le tracteur de MSFS</span></label>
       <label class="check"><input type="checkbox" id="setAutoXpdr"> <span>Régler le transpondeur automatiquement après la clearance</span></label>
       <label class="check"><input type="checkbox" id="setBeta"> <span>Recevoir les versions bêta (nouveautés en avance, peuvent contenir des bugs)</span></label>

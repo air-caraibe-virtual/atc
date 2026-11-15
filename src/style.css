@@ -198,3 +198,11 @@ input[type=checkbox] { accent-color: var(--accent); }
 /* Quitter l'ATC */
 .top-actions .quit { color: #ff8a8f; border-color: rgba(229,72,77,.45); }
 .top-actions .quit:hover { background: rgba(229,72,77,.15); color: #fff; }
+
+/* Touche du micro (PTT) */
+.ptt-row { display: flex; flex-direction: column; gap: 6px; margin: 6px 0; }
+.ptt-row > span { font-size: 13px; }
+.ptt-ctl { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ptt-key { font: 600 12px/1 ui-monospace, Consolas, monospace; padding: 7px 10px; border-radius: 6px; border: 1px solid var(--line); background: rgba(255,255,255,.04); min-width: 120px; }
+#btnPttDetect.on { background: #e5484d; border-color: #e5484d; color: #fff; }
+.ptt-hint { color: var(--muted, #8fa0b8); font-size: 11px; }

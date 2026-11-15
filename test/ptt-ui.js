@@ -1,0 +1,24 @@
+const { app, BrowserWindow, ipcMain } = require('electron');
+require('../main.js');
+const fs = require('fs'); const wait = (ms) => new Promise(r => setTimeout(r, ms));
+const LOG = '/tmp/claude-0/ptt.log'; fs.writeFileSync(LOG, ''); const log = (s) => fs.appendFileSync(LOG, s + '\n');
+app.on('browser-window-created', (e, w) => w.webContents.on('console-message', (ev, l, m, line, src) => { if (l >= 2) log('console: ' + m + ' ' + src + ':' + line); }));
+app.whenReady().then(async () => {
+  ipcMain.removeHandler('mic-shortcut'); ipcMain.handle('mic-shortcut', (_e, a) => { log('raccourci enregistré : ' + a); return { ok: true }; });
+  ipcMain.removeHandler('stt-prepare'); ipcMain.handle('stt-prepare', () => ({ ok: true }));
+  await wait(4000);
+  const w = BrowserWindow.getAllWindows()[0];
+  const js = (c) => Promise.race([w.webContents.executeJavaScript(c), wait(6000).then(() => 'TIMEOUT')]);
+  await js(`document.getElementById('btnSettings').click(); document.getElementById('setMic').checked = true; document.getElementById('setMic').dispatchEvent(new Event('change')); 1`);
+  await wait(500);
+  await js(`document.getElementById('btnPttDetect').click(); 1`);
+  log('pendant : ' + await js(`document.getElementById('pttLabel').textContent`));
+  w.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'F9' }); await wait(400);
+  log('après F9 : ' + await js(`document.getElementById('pttLabel').textContent + ' | ' + document.getElementById('pttHint').textContent`));
+  await js(`document.getElementById('btnPttDetect').click(); 1`);
+  w.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'K', modifiers: ['control', 'shift'] }); await wait(400);
+  log('après Ctrl+Maj+K : ' + await js(`document.getElementById('pttLabel').textContent`));
+  fs.mkdirSync('/tmp/claude-0/shots', { recursive: true });
+  const img = await w.webContents.capturePage(); fs.writeFileSync('/tmp/claude-0/shots/ptt.png', img.toPNG());
+  app.exit(0);
+});

@@ -375,7 +375,7 @@
     if (!S.mic || !engine.flight || engine.phase === 'DONE') return;
     const b = document.createElement('button');
     b.className = 'act mic' + (Mic.state === 'rec' ? ' rec' : '');
-    const key = S.micKey ? ` (${S.micKey.replace('Space', 'Espace')})` : '';
+    const key = S.micJoy ? ' (joystick)' : S.micKey ? ` (${S.micKey.replace('Space', 'Espace')})` : '';
     const label = { off: '🎙 Parler', loading: '🎙 Préparation…', rec: '🔴 Je parle…', busy: '⏳ Analyse…' }[Mic.state];
     const sub = Mic.state === 'loading' && Mic.prog ? `Modèle vocal : ${Mic.prog} %` : Mic.state === 'rec' ? 'Cliquez (ou la touche) pour terminer' : Mic.state === 'busy' ? 'Reconnaissance en cours' : 'Appuyez puis parlez' + key;
     b.innerHTML = '<b></b><small></small>'; b.children[0].textContent = label; b.children[1].textContent = sub;
@@ -396,12 +396,21 @@
     return Mic.preparing;
   }
   function micSetup() {
-    if (api && api.micShortcut) api.micShortcut(S.mic ? (S.micKey || null) : null).then((r) => { if (S.mic && S.micKey && r && !r.ok) addMessage({ from: 'system', text: `Micro : la touche ${S.micKey} est déjà prise par une autre application, choisissez-en une autre dans les paramètres.` }); });
-    if (S.mic && !Mic.ready) { if (!Mic.ready) addMessage({ from: 'system', text: 'Micro activé : préparation de la reconnaissance vocale (premier lancement : téléchargement d\'environ 80 Mo, une seule fois).' }); micPrepare().then((ok) => { if (ok) addMessage({ from: 'system', text: 'Micro prêt : appuyez sur « 🎙 Parler »' + (S.micKey ? ` ou sur ${S.micKey}` : '') + ', dites votre message, puis appuyez de nouveau (ou taisez-vous une seconde).' }); render(); }); }
+    if (api && api.micShortcut) api.micShortcut(S.mic && !S.micJoy ? (S.micKey || null) : null).then((r) => { if (S.mic && S.micKey && r && !r.ok) addMessage({ from: 'system', text: `Micro : la touche ${S.micKey} est déjà prise par une autre application, choisissez-en une autre dans les paramètres.` }); });
+    if (S.mic && !Mic.ready && !Mic.preparing) {
+      if (!Mic.announced) addMessage({ from: 'system', text: 'Micro activé : préparation de la reconnaissance vocale (premier lancement : téléchargement d\'environ 80 Mo, une seule fois).' });
+      Mic.announced = true;
+      micPrepare().then((ok) => { if (ok) addMessage({ from: 'system', text: 'Micro prêt : appuyez sur « 🎙 Parler » ou sur votre touche d\'alternat, dites votre message, puis relâchez (ou taisez-vous une seconde).' }); render(); });
+    }
     render();
   }
   if (api && api.onSttProgress) api.onSttProgress((p) => { if (p && p.total) { Mic.prog = Math.round((p.loaded / p.total) * 100); render(); } });
-  if (api && api.onMicToggle) api.onMicToggle(() => (Mic.state === 'rec' ? micStop() : micStart()));
+  // touche du micro : appui = début (ou fin si on parlait déjà), maintien = alternat jusqu'au relâchement
+  if (api && api.onMicKey) api.onMicKey((k) => {
+    if (k === 'press') { if (Mic.state === 'rec') micStop(); else { Mic.held = false; micStart(); } }
+    else if (k === 'hold') Mic.held = true;
+    else if (k === 'release') { const h = Mic.held; Mic.held = false; if (h && Mic.state === 'rec') micStop(); }
+  });
   async function micStart() {
     if (!S.mic || Mic.state !== 'off') return;
     if (!engine.flight) { addMessage({ from: 'system', text: 'Micro : chargez d\'abord un plan de vol.' }); return; }
@@ -415,21 +424,29 @@
     Mic.buf = []; let spoke = false, quietMs = 0, totalMs = 0;
     proc.onaudioprocess = (ev) => {
       if (Mic.state !== 'rec') return;
+      ev.outputBuffer.getChannelData(0).fill(0); // jamais de son vers les haut-parleurs
       const d = ev.inputBuffer.getChannelData(0); Mic.buf.push(new Float32Array(d));
       let e2 = 0; for (let i = 0; i < d.length; i++) e2 += d[i] * d[i];
       const rms = Math.sqrt(e2 / d.length), ms = (d.length / ac.sampleRate) * 1000;
       totalMs += ms;
       if (rms > 0.025) { spoke = true; quietMs = 0; } else if (spoke) quietMs += ms;
-      // fin automatique : 1,3 s de silence après avoir parlé, ou 15 s au maximum
+      // fin automatique : 1,3 s de silence après avoir parlé, ou 15 s au maximum (pas pendant l'alternat)
+      if (Mic.held && totalMs < 30000) return;
       if ((spoke && quietMs > 1300) || totalMs > 15000 || (!spoke && totalMs > 7000)) micStop(!spoke);
     };
-    src.connect(proc); proc.connect(ac.destination);
+    // le processeur doit être relié à la sortie pour tourner : on passe par un volume à zéro
+    const mute = ac.createGain(); mute.gain.value = 0;
+    src.connect(proc); proc.connect(mute); mute.connect(ac.destination);
     Mic.state = 'rec'; render();
-    try { squelch(false); } catch (_) {}
+    micBeep(880);
+  }
+  // petit bip discret (début / fin de l'alternat), à la place du bruit de squelch
+  function micBeep(f) {
+    try { const ac = ctx(), o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime; o.frequency.value = f; g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.08 * S.volume, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.09); o.connect(g).connect(ac.destination); o.start(t); o.stop(t + 0.1); } catch (_) {}
   }
   async function micStop(cancel) {
     if (Mic.state !== 'rec') return;
-    Mic.state = 'busy'; render();
+    Mic.state = 'busy'; Mic.held = false; render(); micBeep(660);
     try { Mic.stream.getTracks().forEach((t) => t.stop()); } catch (_) {}
     const sr = Mic.ac ? Mic.ac.sampleRate : 16000;
     try { await Mic.ac.close(); } catch (_) {}
@@ -663,7 +680,7 @@
   if ($('btnQuit')) $('btnQuit').onclick = () => { if (api && api.quitApp) api.quitApp(); else window.close(); };
   $('btnSettings').onclick = () => {
     $('setLang').value = S.radioMode; $('setTts').value = S.ttsEngine; $('setFx').value = S.radioFx; fillVoiceSelect(); $('setRate').value = S.rate; $('setVol').value = S.volume;
-    $('setSquelch').checked = S.squelch; $('setPilotVoice').checked = S.pilotVoice; $('setCom').checked = S.requireCom; $('setAutoCom').checked = S.autoCom; $('setAutoXpdr').checked = S.autoXpdr; $('setAutoPush').checked = S.autoPush !== false; $('setTrafficMax').value = String(S.trafficMax || 16); $('setFsltl').checked = S.preferFsltl !== false; $('setAutoRb').checked = S.autoReadback; $('setMic').checked = !!S.mic; $('setMicKey').value = S.micKey || '';
+    $('setSquelch').checked = S.squelch; $('setPilotVoice').checked = S.pilotVoice; $('setCom').checked = S.requireCom; $('setAutoCom').checked = S.autoCom; $('setAutoXpdr').checked = S.autoXpdr; $('setAutoPush').checked = S.autoPush !== false; $('setTrafficMax').value = String(S.trafficMax || 16); $('setFsltl').checked = S.preferFsltl !== false; $('setAutoRb').checked = S.autoReadback; $('setMic').checked = !!S.mic; pttShow();
     $('dlgSettings').classList.remove('hidden');
   };
   const bindSetting = (id, key, conv) => { $(id).onchange = (e) => { S[key] = conv(e.target); save(); if (key === 'radioMode') { S.lang = S.radioMode === 'en' ? 'en' : 'fr'; save(); setTimeout(fillVoiceSelect); engine.uiLang = S.lang; engine.setRadioMode(S.radioMode); } render(); }; };
@@ -679,7 +696,67 @@
   bindSetting('setAutoCom', 'autoCom', (e) => { autoTune.tries = 0; autoTune.warned = false; return e.checked; });
   bindSetting('setAutoRb', 'autoReadback', (e) => { $('chkAutoRb').checked = e.checked; return e.checked; });
   bindSetting('setMic', 'mic', (e) => { setTimeout(micSetup); return e.checked; });
-  bindSetting('setMicKey', 'micKey', (e) => { setTimeout(micSetup); return e.value; });
+  // ---- Détection de la touche du micro (PTT) : clavier ou bouton de joystick ----
+  const KEYNAME = { ' ': 'Space', ArrowUp: 'Up', ArrowDown: 'Down', ArrowLeft: 'Left', ArrowRight: 'Right', Enter: 'Return', Escape: 'Esc', '+': 'Plus' };
+  function accelFromEvent(e) {
+    if (['Control', 'Shift', 'Alt', 'Meta', 'AltGraph'].includes(e.key)) return null;
+    let k = null;
+    if (/^F([1-9]|1\d|2[0-4])$/.test(e.key)) k = e.key;
+    else if (/^Numpad\d$/.test(e.code)) k = 'num' + e.code.slice(6);
+    else if (/^Key[A-Z]$/.test(e.code)) k = e.code.slice(3);
+    else if (/^Digit\d$/.test(e.code)) k = e.code.slice(5);
+    else if (KEYNAME[e.key]) k = KEYNAME[e.key];
+    else if (['Tab', 'Insert', 'Delete', 'Home', 'End', 'PageUp', 'PageDown', 'Backspace'].includes(e.key)) k = e.key;
+    else if (e.code === 'NumpadAdd') k = 'numadd'; else if (e.code === 'NumpadSubtract') k = 'numsub'; else if (e.code === 'NumpadMultiply') k = 'nummult'; else if (e.code === 'NumpadDivide') k = 'numdiv'; else if (e.code === 'NumpadDecimal') k = 'numdec';
+    if (!k) return null;
+    const mods = []; if (e.ctrlKey) mods.push('Ctrl'); if (e.altKey) mods.push('Alt'); if (e.shiftKey) mods.push('Shift');
+    return [...mods, k].join('+');
+  }
+  const pttName = () => S.micJoy ? `Joystick « ${S.micJoy.name} » — bouton ${S.micJoy.button + 1}` : S.micKey ? S.micKey.replace('Space', 'Espace').replace('Shift', 'Maj').replace(/^num/, 'Pavé num. ') : 'Aucune (bouton « Parler » dans ATC)';
+  function pttShow(hint) { if ($('pttLabel')) $('pttLabel').textContent = pttName(); if ($('pttHint')) $('pttHint').textContent = hint || (S.micJoy || S.micKey ? 'Appui bref : ATC écoute puis coupe tout seul. Maintenu : ATC écoute tant que vous appuyez.' : ''); }
+  let pttCapture = null;
+  function pttStop(msg) {
+    if (!pttCapture) return;
+    clearInterval(pttCapture.poll); window.removeEventListener('keydown', pttCapture.onKey, true);
+    pttCapture = null; $('btnPttDetect').textContent = 'Détecter'; $('btnPttDetect').classList.remove('on');
+    pttShow(msg); micSetup();
+  }
+  $('btnPttDetect').onclick = () => {
+    if (pttCapture) return pttStop();
+    if (api && api.micShortcut) api.micShortcut(null); // la touche actuelle ne doit pas déclencher le micro pendant la détection
+    $('btnPttDetect').textContent = 'Annuler'; $('btnPttDetect').classList.add('on');
+    $('pttLabel').textContent = 'Appuyez sur une touche ou un bouton du joystick…';
+    $('pttHint').textContent = 'Échap pour annuler.';
+    const base = new Map(); // boutons déjà enfoncés au départ (ignorés)
+    (navigator.getGamepads ? [...navigator.getGamepads()] : []).forEach((g) => { if (g) base.set(g.index, g.buttons.map((b) => b.pressed)); });
+    const onKey = (e) => {
+      e.preventDefault(); e.stopPropagation();
+      if (e.key === 'Escape') return pttStop();
+      const acc = accelFromEvent(e); if (!acc) return;
+      S.micKey = acc; S.micJoy = null; save(); pttStop();
+    };
+    const poll = setInterval(() => {
+      for (const g of navigator.getGamepads ? navigator.getGamepads() : []) {
+        if (!g) continue;
+        const was = base.get(g.index) || [];
+        const i = g.buttons.findIndex((b, k) => b.pressed && !was[k]);
+        if (i >= 0) { S.micJoy = { id: g.id, name: g.id.replace(/\s*\(.*$/, '').slice(0, 40), button: i }; S.micKey = ''; save(); return pttStop(); }
+      }
+    }, 40);
+    window.addEventListener('keydown', onKey, true);
+    pttCapture = { poll, onKey };
+  };
+  $('btnPttClear').onclick = () => { if (pttCapture) pttStop(); S.micKey = ''; S.micJoy = null; save(); pttShow(); micSetup(); };
+  // Bouton de joystick : vrai alternat (appuyé = on parle, relâché = fin)
+  let joyWas = false;
+  setInterval(() => {
+    if (!S.mic || !S.micJoy || pttCapture || !navigator.getGamepads) return;
+    const g = [...navigator.getGamepads()].find((x) => x && x.id === S.micJoy.id);
+    const down = !!(g && g.buttons[S.micJoy.button] && g.buttons[S.micJoy.button].pressed);
+    if (down && !joyWas) { if (Mic.state === 'off') { Mic.held = true; micStart(); } }
+    else if (!down && joyWas) { const h = Mic.held; Mic.held = false; if (h && Mic.state === 'rec') micStop(); }
+    joyWas = down;
+  }, 40);
   $('setTrafficMax').onchange = (e) => { S.trafficMax = +e.target.value; save(); traffic.max = S.trafficMax; };
   $('setFsltl').onchange = (e) => { S.preferFsltl = e.target.checked; save(); traffic.preferFsltl = S.preferFsltl; traffic.models = null; traffic.modelsAt = 0; };
   $('chkAutoRb').checked = S.autoReadback;

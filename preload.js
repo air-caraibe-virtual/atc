@@ -30,7 +30,7 @@ contextBridge.exposeInMainWorld('sim', {
   sttTranscribe: (samples, langs) => ipcRenderer.invoke('stt-transcribe', samples, langs),
   onSttProgress: (cb) => ipcRenderer.on('stt-progress', (_e, d) => cb(d)),
   micShortcut: (accel) => ipcRenderer.invoke('mic-shortcut', accel),
-  onMicToggle: (cb) => ipcRenderer.on('mic-toggle', () => cb()),
+  onMicKey: (cb) => { ['mic-press', 'mic-hold', 'mic-release'].forEach((ch) => ipcRenderer.on(ch, () => cb(ch.slice(4)))); },
   quitApp: () => ipcRenderer.invoke('app-quit'),
   appVersion: () => ipcRenderer.invoke('app-version'),
   updateAttention: (o) => ipcRenderer.invoke('update-attention', o),
