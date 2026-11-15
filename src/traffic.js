@@ -133,14 +133,20 @@
         if (this.onModels) this.onModels(-1, 0, tel.title);
       }
       const usable = this.models && (this.models.length || !(this.io.connected && this.io.connected()));
+      // plein : on libère la place du plus ancien avion garé pour un vol réel en mouvement
+      if (now >= this.nextSpawn && usable && this.live && this.list().length >= this.max) {
+        const c = this.liveCandidates(ctx);
+        const old = this.ai.filter((a) => a.static && a.state === 'static' && (!this.tel || M(a.pos, this.tel) > 300)).sort((x, y) => x.created - y.created)[0];
+        if (old && (c.arr.length || c.dep.length)) old.state = 'gone';
+      }
       if (now >= this.nextSpawn && usable && this.live) {
-        this.nextSpawn = now + (20 + this.rand() * 25) * 1000;
+        this.nextSpawn = now + (10 + this.rand() * 12) * 1000;
         if (this.list().length < this.max) this.spawn(ctx);
       }
       // avions stationnés : on remplit les parkings avec les vrais avions au sol (2 toutes les 5 s)
       if (now >= (this.nextStatic || 0) && usable && this.live) {
-        this.nextStatic = now + 5000;
-        for (let i = 0; i < 2 && this.list().length < this.max; i++) if (!this.spawnStatic(ctx)) break;
+        this.nextStatic = now + 4000;
+        for (let i = 0; i < 3 && this.list().length < this.max; i++) if (!this.spawnStatic(ctx)) break;
       }
       for (const a of this.ai) this.step(a, dt, ctx);
       this.control(ctx);
@@ -280,7 +286,7 @@
       for (const f of this.live || []) {
         if (this.used.has(f.cs) || !/^[A-Z]{3}\d/.test(f.cs)) continue;
         const d = distNm(f, ap);
-        if (!f.onGround && d > 4 && d < 60 && (f.alt == null || f.alt - ctx.elev < 13000) && f.track != null && angDiff(f.track, bearing(f, ap)) < 70 && f.vs <= 300) out.arr.push({ ...f, d });
+        if (!f.onGround && d > 4 && d < 80 && (f.alt == null || f.alt - ctx.elev < 18000) && f.track != null && angDiff(f.track, bearing(f, ap)) < 80 && f.vs <= 500) out.arr.push({ ...f, d });
         else if (f.onGround && d < 3 && f.kts > 3) out.dep.push({ ...f, d });
         else if (f.onGround && d < 3) out.park.push({ ...f, d });
       }
@@ -290,7 +296,7 @@
     spawn(ctx) {
       const deps = this.ai.filter((a) => a.kind === 'dep').length, arrs = this.ai.filter((a) => a.kind === 'arr').length;
       const c = this.liveCandidates(ctx);
-      const cap = Math.max(2, Math.min(4, Math.round(this.max / 3)));
+      const cap = Math.max(3, Math.min(8, Math.round(this.max / 3)));
       const canDep = deps < cap && c.dep.length, canArr = arrs < cap && c.arr.length;
       const wantDep = ctx.side === 'dep' ? this.rand() < 0.6 : this.rand() < 0.3;
       let ok = false;
@@ -342,10 +348,10 @@
     wakeStatics() {
       const ctx = this.ctx; if (!ctx || !this.live) return;
       const deps = this.ai.filter((a) => a.kind === 'dep').length;
-      const cap = Math.max(2, Math.min(4, Math.round(this.max / 3)));
+      const cap = Math.max(3, Math.min(8, Math.round(this.max / 3)));
       let n = deps;
       for (const a of this.ai) {
-        if (!a.static || n >= cap) continue;
+        if (!a.static || !a.gateObj || n >= cap) continue;
         const f = this.live.find((x) => x.cs === a.cs);
         if (!f || !f.onGround || f.kts <= 3) continue;
         const r = Airport.taxiToRunway(ctx.L, a.gateObj, ctx.D.name);
@@ -514,7 +520,8 @@
           break;
         }
         case 'parked_in':
-          if (t > a.until) a.state = 'gone';
+          // le vol réel est arrivé : il reste garé au parking, sauf s'il faut de la place pour d'autres vols
+          if (t > a.until) { a.state = 'static'; a.static = true; a.kind = 'park'; a.until = Infinity; }
           break;
       }
     }

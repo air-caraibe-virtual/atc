@@ -6,13 +6,15 @@
   const api = window.sim || null; // absent si la page est ouverte hors de l'appli
 
   // ---------- Paramètres ----------
-  const DEFAULTS = { lang: 'fr', ttsEngine: 'neural', neuralVoice: 'auto', voice: '', rate: 1.05, volume: 1, radioFx: 'medium', squelch: true, pilotVoice: false, requireCom: false, autoCom: true, autoXpdr: true, autoReadback: true, autoPush: true, traffic: false, sbUser: '', mute: false, radioMode: 'auto', mic: false, micKey: 'Ctrl+Space', v: 4 };
+  const DEFAULTS = { lang: 'fr', ttsEngine: 'neural', neuralVoice: 'auto', voice: '', rate: 1.05, volume: 1, radioFx: 'medium', squelch: true, pilotVoice: false, requireCom: false, autoCom: true, autoXpdr: true, autoReadback: true, autoPush: true, traffic: false, sbUser: '', mute: false, radioMode: 'auto', mic: false, micKey: 'Ctrl+Space', trafficMax: 16, v: 5 };
   let S = { ...DEFAULTS };
   let stored = {};
   try { stored = JSON.parse(localStorage.getItem('atcsolo') || '{}') || {}; S = { ...DEFAULTS, ...stored }; } catch (_) {}
   if ((stored.v || 1) < 3) { if ((stored.v || 1) < 2) { S.autoCom = true; S.autoXpdr = true; } S.autoReadback = true; S.v = 3; try { localStorage.setItem('atcsolo', JSON.stringify(S)); } catch (_) {} }
   // v4 : langue radio automatique (anglais + langue du pays)
   if ((stored.v || 1) < 4) { S.radioMode = 'auto'; S.v = 4; try { localStorage.setItem('atcsolo', JSON.stringify(S)); } catch (_) {} }
+  // v5 : plus d'avions par défaut (16 au lieu de 8)
+  if ((stored.v || 1) < 5) { if (!stored.trafficMax || stored.trafficMax <= 8) S.trafficMax = 16; S.v = 5; try { localStorage.setItem('atcsolo', JSON.stringify(S)); } catch (_) {} }
   S.lang = S.radioMode === 'en' ? 'en' : 'fr'; // langue de l'interface
   const save = () => { try { localStorage.setItem('atcsolo', JSON.stringify(S)); } catch (_) {} };
 
@@ -659,7 +661,7 @@
 
   $('btnSettings').onclick = () => {
     $('setLang').value = S.radioMode; $('setTts').value = S.ttsEngine; $('setFx').value = S.radioFx; fillVoiceSelect(); $('setRate').value = S.rate; $('setVol').value = S.volume;
-    $('setSquelch').checked = S.squelch; $('setPilotVoice').checked = S.pilotVoice; $('setCom').checked = S.requireCom; $('setAutoCom').checked = S.autoCom; $('setAutoXpdr').checked = S.autoXpdr; $('setAutoPush').checked = S.autoPush !== false; $('setTrafficMax').value = String(S.trafficMax || 8); $('setFsltl').checked = S.preferFsltl !== false; $('setAutoRb').checked = S.autoReadback; $('setMic').checked = !!S.mic; $('setMicKey').value = S.micKey || '';
+    $('setSquelch').checked = S.squelch; $('setPilotVoice').checked = S.pilotVoice; $('setCom').checked = S.requireCom; $('setAutoCom').checked = S.autoCom; $('setAutoXpdr').checked = S.autoXpdr; $('setAutoPush').checked = S.autoPush !== false; $('setTrafficMax').value = String(S.trafficMax || 16); $('setFsltl').checked = S.preferFsltl !== false; $('setAutoRb').checked = S.autoReadback; $('setMic').checked = !!S.mic; $('setMicKey').value = S.micKey || '';
     $('dlgSettings').classList.remove('hidden');
   };
   const bindSetting = (id, key, conv) => { $(id).onchange = (e) => { S[key] = conv(e.target); save(); if (key === 'radioMode') { S.lang = S.radioMode === 'en' ? 'en' : 'fr'; save(); setTimeout(fillVoiceSelect); engine.uiLang = S.lang; engine.setRadioMode(S.radioMode); } render(); }; };
@@ -896,7 +898,7 @@
   }
 
   // ---- Trafic IA (vrais vols du moment) ----
-  const traffic = new Traffic({ max: S.trafficMax || 8, io: {
+  const traffic = new Traffic({ max: S.trafficMax || 16, io: {
     models: () => (api && api.aiModels && simStatus === 'connected' && !demo ? api.aiModels() : []),
     live: (lat, lon) => (api && api.liveFlights ? api.liveFlights(lat, lon) : null),
     spawn: (id, title, livery, tail, p) => (api && !demo && simStatus === 'connected' ? api.aiSpawn(id, title, livery, tail, p) : true),
