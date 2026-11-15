@@ -32,6 +32,7 @@
 
   // Compagnies reconnues dans le nom des livrées
   const LIVERY_AIRLINES = [
+    [/cityline/i, 'CLH'], [/cityhopper/i, 'KLC'], [/cityflyer/i, 'EFW'], [/air dolomiti/i, 'DLA'], [/binter/i, 'IBB'], [/air nostrum/i, 'ANE'],
     [/air france/i, 'AFR'], [/easy ?jet/i, 'EZY'], [/transavia/i, 'TVF'], [/lufthansa/i, 'DLH'], [/british/i, 'BAW'], [/klm/i, 'KLM'],
     [/iberia/i, 'IBE'], [/vueling/i, 'VLG'], [/ryanair/i, 'RYR'], [/swiss/i, 'SWR'], [/delta/i, 'DAL'], [/american/i, 'AAL'], [/united/i, 'UAL'],
     [/emirates/i, 'UAE'], [/qatar/i, 'QTR'], [/cara[iï]bes?/i, 'FWI'], [/corsair/i, 'CRL'], [/volotea/i, 'VOE'], [/\btap\b/i, 'TAP'],
@@ -60,6 +61,36 @@
     return TYPE_NAMES[t] || t;
   }
   const NOT_AIRLINER = /(cargo|freighter|tanker|military|\bkc-|bizjet|private)/i;
+
+  // ---- Type d'avion plausible pour un vol réel (OpenSky ne donne pas le type) ----
+  // taille d'un modèle : régional, moyen-courrier (narrow) ou gros-porteur (wide)
+  const WIDE_RE = /(?<![A-Z0-9])(A3[3-4][0-9]|A35[0-9K]|A388|A38[0-9]|A380|A330|A340|A350|B7[4678][0-9A-Z]|B77W|747|767|777|787|DREAMLINER)(?![0-9])/;
+  const REG_RE = /(?<![A-Z0-9])(E1[79][05]|E[0-9]{2}[0-9A-Z]?|E-?JET|EMBRAER|ERJ|CRJ[0-9X]?|ATR|AT[47][0-9]|DASH ?8|DH8[A-D]?|Q400)(?![0-9])/;
+  function sizeOf(model) {
+    const s = ((model && model.title) + ' ' + (model && model.livery)).toUpperCase();
+    return WIDE_RE.test(s) ? 'wide' : REG_RE.test(s) ? 'reg' : 'narrow';
+  }
+  // compagnies qui n'ont (presque) que des long-courriers / des régionaux
+  const LONGHAUL_ONLY = new Set(['UAE', 'QTR', 'ETD', 'SIA', 'CPA', 'THA', 'MAS', 'CCA', 'CES', 'CSN', 'JAL', 'ANA', 'KAL', 'AAR', 'EVA', 'CAL', 'SVA', 'ETH', 'KQA', 'SAA', 'QFA', 'ANZ', 'FBU', 'CRL', 'THT', 'OMA', 'GIA', 'PAL', 'VIR', 'ELY', 'MSR', 'RJA']);
+  const REGIONAL_ONLY = new Set(['HOP', 'KLC', 'CLH', 'BCY', 'DLA', 'EFW', 'NJE', 'CYL', 'LOG', 'BEE', 'ANE', 'IBS', 'SWT', 'TVS', 'AIB', 'TUS', 'KRP', 'ADR', 'SXS', 'WIF', 'NAX', 'BRX']);
+  // numéros de vol long-courrier des grandes compagnies mixtes
+  const LONGHAUL_NUM = { AFR: [0, 999], KLM: [0, 999], DLH: [400, 799], BAW: [1, 299], IBE: [6000, 6999], ITY: [600, 699], AZA: [600, 699], TAP: [0, 299], SWR: [0, 299], AUA: [0, 99], SAS: [900, 999], FIN: [0, 199], THY: [0, 99], ACA: [800, 899], AEA: [0, 199], FWI: [500, 899], TSC: [0, 999] };
+  const US_MAJORS = new Set(['AAL', 'DAL', 'UAL']);
+  function wantSize(cs, icao) {
+    const m = String(cs || '').match(/^([A-Z]{3})(\d+)/); if (!m) return 'narrow';
+    const al = m[1], n = +m[2], here = String(icao || '');
+    if (LONGHAUL_ONLY.has(al)) return 'wide';
+    if (REGIONAL_ONLY.has(al)) return 'reg';
+    // compagnies américaines hors d'Amérique du Nord : forcément un transatlantique
+    if (US_MAJORS.has(al)) return /^[KCPM]/.test(here) ? 'narrow' : 'wide';
+    const r = LONGHAUL_NUM[al];
+    if (r && n >= r[0] && n <= r[1]) return 'wide';
+    return 'narrow';
+  }
+  const SIZE_ORDER = { wide: ['wide'], narrow: ['narrow', 'reg'], reg: ['reg', 'narrow'] };
+  // place assez grande pour l'avion (parkings MSFS : rayon connu)
+  const standFits = (g, size) => !g || !g.radius || (size === 'wide' ? g.radius >= 28 : true);
+  const standSmallEnough = (g, size) => !g || !g.radius || size === 'wide' || g.radius < 40;
 
   class Traffic {
     constructor(opts) {
@@ -320,22 +351,25 @@
     }
 
     // Modèle dont la livrée correspond à la compagnie du vol réel, sinon un avion de ligne au hasard
-    modelFor(cs) {
+    modelFor(cs, size) {
       if (!this.models.length) return null;
       const code = cs.slice(0, 3);
       const re = (LIVERY_AIRLINES.find(([, c]) => c === code) || [])[0];
       // code OACI de la compagnie dans le titre ou la livrée (convention FSLTL : « …_AFR », « AFR … »), ou nom de la compagnie
       const codeRe = new RegExp('(^|[^A-Z0-9])' + code + '([^A-Z0-9]|$)');
       const match = this.models.filter((m) => codeRe.test((m.title + ' ' + m.livery).toUpperCase()) || (re && (re.test(m.livery) || re.test(m.title))));
-      const pool = match.length ? match : this.models;
-      return pool[Math.floor(this.rand() * pool.length)];
+      const pick = (l) => l[Math.floor(this.rand() * l.length)];
+      // 1) bonne compagnie + type plausible ; 2) type plausible (autre livrée) ; 3) bonne compagnie ; 4) n'importe quel avion de ligne
+      for (const s of SIZE_ORDER[size || 'narrow']) { const l = match.filter((m) => sizeOf(m) === s); if (l.length) return pick(l); }
+      for (const s of SIZE_ORDER[size || 'narrow']) { const l = this.models.filter((m) => sizeOf(m) === s); if (l.length) return pick(l); }
+      return pick(match.length ? match : this.models);
     }
-    newAircraft(kind, ctx, real) {
-      const model = this.modelFor(real.cs);
+    newAircraft(kind, ctx, real, size) {
+      const model = this.modelFor(real.cs, size || wantSize(real.cs, ctx.a && ctx.a.icao));
       const id = this.nextId++;
       const cs = real.cs, tail = real.icao24 ? real.icao24.toUpperCase() : this.identity(model, ctx.a.icao[0]).tail;
       this.used.add(cs);
-      return { id, kind, cs, tail, model, type: model ? typeOf(model) : '', state: 'pending', ready: false, created: this.now, gear: true, light: false, pitch: 0, bank: 0, v: 0 };
+      return { id, kind, cs, tail, model, size: model ? sizeOf(model) : 'narrow', type: model ? typeOf(model) : '', state: 'pending', ready: false, created: this.now, gear: true, light: false, pitch: 0, bank: 0, v: 0 };
     }
 
     // Avion stationné immobile au parking le plus proche de sa vraie position, nez vers le terminal
@@ -344,11 +378,12 @@
       if (!c.park.length) return false;
       const real = c.park[Math.floor(this.rand() * c.park.length)];
       const L = ctx.L, tel = this.tel;
-      const free = L.gates.filter((g) => M(g, tel) > 60 && this.ai.every((a) => !a.pos || M(a.pos, g) > 45));
+      const size = wantSize(real.cs, ctx.a.icao);
+      const free = L.gates.filter((g) => M(g, tel) > 60 && standFits(g, size) && standSmallEnough(g, size) && this.ai.every((a) => !a.pos || M(a.pos, g) > 45));
       if (!free.length) { this.used.add(real.cs); return false; }
       const g = free.reduce((b, x) => (M(x, real) < M(b, real) ? x : b), free[0]);
       if (M(g, real) > 700) { this.used.add(real.cs); return false; }
-      const a = this.newAircraft('park', ctx, real);
+      const a = this.newAircraft('park', ctx, real, size);
       const sp = standPose(L, g);
       a.pos = sp.pos; a.hdg = sp.hdg; a.alt = ctx.elev; a.onGround = true;
       a.state = 'static'; a.static = true; a.gate = g.ref; a.gateObj = g;
@@ -372,7 +407,8 @@
     }
     spawnDeparture(ctx, real) {
       const L = ctx.L, tel = this.tel;
-      const gates = L.gates.filter((g) => M(g, tel) > 150 && this.ai.every((a) => !a.pos || M(a.pos, g) > 120));
+      const size = wantSize(real && real.cs, ctx.a.icao);
+      const gates = L.gates.filter((g) => M(g, tel) > 150 && standFits(g, size) && standSmallEnough(g, size) && this.ai.every((a) => !a.pos || M(a.pos, g) > 120));
       if (!gates.length) return false;
       // parkings les plus proches de la vraie position de l'avion au sol
       const order = real && real.lat != null ? [...gates].sort((x, y) => M(x, real) - M(y, real)) : gates;
@@ -381,7 +417,7 @@
         if (!g) break;
         const r = Airport.taxiToRunway(L, g, ctx.D.name);
         if (!r || r.pts.length < 2) continue;
-        const a = this.newAircraft('dep', ctx, real);
+        const a = this.newAircraft('dep', ctx, real, size);
         a.path = [{ lat: g.lat, lon: g.lon }, ...r.pts]; a.via = r.via; a.hold = r.hold;
         a.pos = { lat: g.lat, lon: g.lon }; a.hdg = bearing(a.path[0], a.path[1]); a.alt = ctx.elev; a.onGround = true;
         a.state = 'parked'; a.until = this.now + (15 + this.rand() * 45) * 1000; a.gate = g.ref;
@@ -511,7 +547,8 @@
           a.pos = move(a.pos, a.hdg, a.v * KT * dt);
           const al = Airport.alongRunway(a.pos, ctx.th, ctx.end);
           if (a.v <= 25 || al.t > 0.92) {
-            const gates = ctx.L.gates.filter((g) => this.ai.every((o) => o === a || !o.gate || o.gate !== g.ref));
+            const fit = ctx.L.gates.filter((g) => standFits(g, a.size) && standSmallEnough(g, a.size));
+            const gates = (fit.length ? fit : ctx.L.gates).filter((g) => this.ai.every((o) => o === a || !o.gate || o.gate !== g.ref));
             const g = gates.length ? gates[Math.floor(this.rand() * gates.length)] : null;
             // on dégage par une vraie sortie (taxiway relié à la piste) en suivant l'axe jusqu'à elle
             const rx = Airport.runwayExit(ctx.L, a.pos, ctx.th, ctx.end, g, 60);
