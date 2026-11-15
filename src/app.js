@@ -413,6 +413,7 @@
   });
   async function micStart() {
     if (!S.mic || Mic.state !== 'off') return;
+    if (Date.now() - (Mic.stoppedAt || 0) < 500) return; // juste après une fin : rebond de touche, on ignore
     if (!engine.flight) { addMessage({ from: 'system', text: 'Micro : chargez d\'abord un plan de vol.' }); return; }
     if (!Mic.ready) { Mic.state = 'loading'; render(); const ok = await micPrepare(); Mic.state = 'off'; render(); if (!ok) return; }
     try {
@@ -457,18 +458,25 @@
       for (let i = 0; i < out.length; i++) out[i] = pcm[Math.floor(i * k)];
       pcm = out;
     }
-    if (cancel || pcm.length < 16000 * 0.4) { Mic.state = 'off'; render(); addMessage({ from: 'system', text: 'Micro : rien entendu.' }); return; }
+    Mic.stoppedAt = Date.now();
+    if (cancel || pcm.length < 16000 * 0.4) { Mic.state = 'off'; render(); micNothing(); return; }
     const langs = [engine.pilotLang(), 'en', engine.stationLang()];
     let r = null;
     try { r = await api.sttTranscribe(pcm, langs); } catch (e) { r = { ok: false, error: e.message }; }
-    Mic.state = 'off';
+    Mic.state = 'off'; Mic.stoppedAt = Date.now();
     handleSpeech(r);
     render();
+  }
+  // « rien entendu » : une seule fois, pas à chaque appui raté
+  function micNothing() {
+    if (Date.now() - (Mic.nothingAt || 0) < 8000) return;
+    Mic.nothingAt = Date.now();
+    addMessage({ from: 'system', text: 'Micro : rien entendu.' });
   }
   function handleSpeech(r) {
     if (!r || !r.ok) { addMessage({ from: 'system', text: 'Micro : reconnaissance impossible (' + ((r && r.error) || 'erreur') + ').' }); return; }
     const res = (r.results || []).filter((x) => x.text && x.text.replace(/[^\p{L}\p{N}]/gu, '').length > 1);
-    if (!res.length) { addMessage({ from: 'system', text: 'Micro : rien entendu.' }); return; }
+    if (!res.length) { micNothing(); return; }
     addMessage({ from: 'system', text: `🎙 Entendu${r.detected ? ' (' + r.detected.toUpperCase() + ')' : ''} : « ${res[0].text} »` });
     const acts = engine.actions();
     if (!acts.length) { addMessage({ from: 'system', text: 'Micro : rien à annoncer au contrôleur pour le moment.' }); return; }
