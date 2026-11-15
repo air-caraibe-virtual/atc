@@ -135,7 +135,7 @@
       for (const k of ks) {
         if (w <= best) break;
         if (txt.includes(' ' + k + ' ')) { best = w; break; }
-        if (!k.includes(' ') && k.length >= 6 && toks.some((t) => Math.abs(t.length - k.length) <= 1 && lev(t, k) <= 1)) { best = w; break; }
+        if (!k.includes(' ') && k.length >= 6 && toks.some((t) => (Math.abs(t.length - k.length) <= 1 && lev(t, k) <= 1) || (t.length > k.length && t.startsWith(k.slice(0, -1))))) { best = w; break; } // « clairancier » = clairance mal transcrit
       }
     }
     return best;

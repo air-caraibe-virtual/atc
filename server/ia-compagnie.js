@@ -5,7 +5,25 @@
 
   Mise en place : voir les étapes données par Claude (Cloudflare > Workers > Créer > coller ce fichier > secret GROQ_KEY).
 */
-const MODELS = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant']; // le 2e sert de secours si le 1er est saturé
+// Modèles préférés, dans l'ordre. Groq change régulièrement sa liste : le serveur lit la liste réelle
+// des modèles disponibles et prend les meilleurs qui existent vraiment.
+const PREFER = [/llama-4-maverick/, /llama-4-scout/, /gpt-oss-120b/, /llama-3\.3-70b/, /qwen3?-?32b/, /kimi-k2/, /gpt-oss-20b/, /llama-3\.1-8b/, /llama/, /qwen/, /mistral|mixtral/, /gemma/];
+const NOT_CHAT = /whisper|guard|tts|playai|orpheus|embed|vision|compound|prompt-guard|distil/i;
+let modelCache = { at: 0, list: [] };
+async function pickModels(env) {
+  if (env.MODEL) return [env.MODEL];
+  if (Date.now() - modelCache.at < 3600000 && modelCache.list.length) return modelCache.list;
+  try {
+    const r = await fetch('https://api.groq.com/openai/v1/models', { headers: { authorization: 'Bearer ' + env.GROQ_KEY } });
+    const j = await r.json();
+    const ids = (j.data || []).filter((m) => m.active !== false && !NOT_CHAT.test(m.id)).map((m) => m.id);
+    const ranked = [];
+    for (const re of PREFER) for (const id of ids) if (re.test(id) && !ranked.includes(id)) ranked.push(id);
+    for (const id of ids) if (!ranked.includes(id)) ranked.push(id);
+    if (ranked.length) modelCache = { at: Date.now(), list: ranked.slice(0, 3) };
+  } catch (_) {}
+  return modelCache.list.length ? modelCache.list : ['llama-3.3-70b-versatile'];
+}
 const MAX_BODY = 24000;      // taille maximale d'une demande (caractères)
 const MAX_TOKENS = 400;      // longueur maximale d'une réponse
 const PER_MINUTE = 20;       // messages par minute et par PC (anti-abus, par instance du serveur)
@@ -34,7 +52,7 @@ export default {
     const messages = [{ role: 'system', content: String(b.system || '').slice(0, 12000) }, ...(Array.isArray(b.messages) ? b.messages.slice(-6) : [])]
       .map((m) => ({ role: m.role === 'assistant' ? 'assistant' : m.role === 'system' ? 'system' : 'user', content: String(m.content || '').slice(0, 12000) }));
     let last = '';
-    for (const model of (env.MODEL ? [env.MODEL, ...MODELS] : MODELS)) {
+    for (const model of await pickModels(env)) {
       const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
         headers: { 'content-type': 'application/json', authorization: 'Bearer ' + env.GROQ_KEY },
@@ -44,7 +62,8 @@ export default {
       const text = j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content;
       if (r.ok && text) return json({ ok: true, text, model });
       last = (j.error && j.error.message) || ('HTTP ' + r.status);
-      if (r.status !== 429 && r.status < 500 && r.status !== 404 && r.status !== 400) break; // erreur de clé : inutile d'essayer un autre modèle
+      if (r.status === 401 || r.status === 403) break; // clé refusée : inutile d'essayer un autre modèle
+      if (r.status === 404 || /model/i.test(last)) modelCache.at = 0; // modèle retiré : on relira la liste
     }
     return json({ ok: false, error: 'IA de la compagnie : ' + last }, 502);
   },
