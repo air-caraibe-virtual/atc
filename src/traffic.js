@@ -507,8 +507,8 @@
       const ctx = { ...ctx0, th: R.th, end: R.end, hdg: R.hdg };
       switch (a.state) {
         case 'parked':
-          // une minute entre deux demandes d'avions IA (clairance ou roulage), pour ne pas saturer la radio
-          if (t > a.until && t - (this.lastAiReq || -1e9) >= 60000) {
+          // 30 secondes entre deux demandes d'avions IA (clairance ou roulage), pour ne pas saturer la radio
+          if (t > a.until && t - (this.lastAiReq || -1e9) >= 30000) {
             this.lastAiReq = t;
             // d'abord la clairance à la Délivrance (si l'aéroport en a une), puis la demande de roulage au Sol
             const del = ctx0.side === 'dep' && this.engine && this.engine.flight && this.engine.flight.dep.freqs && this.engine.flight.dep.freqs.DEL;
