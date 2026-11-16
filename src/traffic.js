@@ -804,8 +804,12 @@
       const e = this.engine;
       const q = this.queue[0];
       const audible = this.audible ? this.audible(q.role, q.side) : false;
-      if (audible && e && (e.busy || e.pending)) return;
-      if (audible && this.io.radioBusy && this.io.radioBusy()) return;
+      // on attend que le joueur ait fini de parler / collationner, mais pas indéfiniment :
+      // sinon un collationnement oublié fige tout le trafic IA (avions arrêtés moteurs en marche)
+      if (q.waitSince == null) q.waitSince = this.now;
+      const waited = this.now - q.waitSince;
+      if (audible && e && (e.busy || e.pending) && waited < 15000) return;
+      if (audible && this.io.radioBusy && this.io.radioBusy() && waited < 20000) return;
       this.queue.shift();
       let delay = 0;
       if (audible) {
