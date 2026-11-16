@@ -18,10 +18,16 @@
   // Position et cap d'un avion garé : parkings MSFS = centre et cap exacts ;
   // parkings OSM = point d'arrêt du nez, donc on recule l'avion d'une demi-longueur, nez vers le terminal
   function standPose(L, g) {
-    if (g.msfs && g.hdg != null) return { pos: { lat: g.lat, lon: g.lon }, hdg: g.hdg };
     let node = null, bd = Infinity;
     for (const [, p] of L.coords) { const d = M(p, g); if (d > 25 && d < bd) { bd = d; node = p; } }
-    const hdg = node ? bearing(node, g) : 0;
+    const nodeHdg = node ? bearing(node, g) : null;
+    // position exacte du parking MSFS ; cap : celui de la ligne d'entrée du stand (peint dans le décor) s'il est proche du cap MSFS,
+    // car le cap des données MSFS est parfois décalé par rapport aux lignes réelles
+    if (g.msfs && g.hdg != null) {
+      const hdg = nodeHdg != null && angDiff(nodeHdg, g.hdg) <= 50 ? nodeHdg : g.hdg;
+      return { pos: { lat: g.lat, lon: g.lon }, hdg };
+    }
+    const hdg = nodeHdg != null ? nodeHdg : 0;
     return { pos: move(g, (hdg + 180) % 360, 18), hdg };
   }
   // feux d'un avion IA selon ce qu'il fait
@@ -432,7 +438,7 @@
         if (!r || r.pts.length < 2) continue;
         const a = this.newAircraft('dep', ctx, real, size);
         a.path = [{ lat: g.lat, lon: g.lon }, ...r.pts]; a.via = r.via; a.hold = r.hold;
-        a.pos = { lat: g.lat, lon: g.lon }; a.hdg = bearing(a.path[0], a.path[1]); a.alt = ctx.elev; a.onGround = true;
+        { const sp = standPose(L, g); a.pos = sp.pos; a.hdg = sp.hdg; } a.alt = ctx.elev; a.onGround = true;
         a.state = 'parked'; a.until = this.now + (15 + this.rand() * 45) * 1000; a.gate = g.ref;
         return this.create(a, 0);
       }
