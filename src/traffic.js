@@ -41,7 +41,7 @@
     return { pos: move(g, (hdg + 180) % 360, 18), hdg };
   }
   // feux d'un avion IA selon ce qu'il fait
-  const lightMode = (a) => (a.static || a.state === 'parked' || a.state === 'parked_in' || a.state === 'taxi_wait' || a.state === 'clr_wait' ? 'park'
+  const lightMode = (a) => (a.static || a.state === 'parked' || a.state === 'parked_in' || a.state === 'taxi_wait' || a.state === 'clr_wait' || a.state === 'push_wait' ? 'park'
     : a.light ? 'rwy' : a.onGround ? 'taxi' : 'cruise');
   const angDiff = (a, b) => Math.abs(((a - b + 540) % 360) - 180);
   const turnTo = (h, target, maxDeg) => { const d = ((target - h + 540) % 360) - 180; return (h + Math.max(-maxDeg, Math.min(maxDeg, d)) + 360) % 360; };
@@ -516,7 +516,7 @@
         const rel = angDiff(bearing(from, p), hdg) * Math.PI / 180;
         return (d * Math.cos(rel) > 0 && d * Math.cos(rel) < dist && Math.abs(d * Math.sin(rel)) < 32) || (d < 30 && rel < 1.9);
       };
-      const parkedLike = (o) => o.static || ['parked', 'parked_in', 'taxi_wait', 'clr_wait'].includes(o.state);
+      const parkedLike = (o) => o.static || ['parked', 'parked_in', 'taxi_wait', 'clr_wait', 'push_wait'].includes(o.state);
       let blocked = false;
       for (const o of this.ai) {
         if (o === a || !o.onGround || !o.pos) continue;
@@ -542,7 +542,7 @@
             this.lastAiReq = t;
             // d'abord la clairance à la Délivrance (si l'aéroport en a une), puis la demande de roulage au Sol
             const del = ctx0.side === 'dep' && this.engine && this.engine.flight && this.engine.flight.dep.freqs && this.engine.flight.dep.freqs.DEL;
-            if (del && !a.gotClr) this.request(a, 'clearance'); else this.request(a, 'taxi');
+            if (del && !a.gotClr) this.request(a, 'clearance'); else if (!a.pushed) this.request(a, 'push'); else this.request(a, 'taxi');
           }
           break;
         case 'taxi_out':
@@ -567,6 +567,8 @@
             a.alt += (2400 / 60) * dt;
             if (a.alt - ctx.elev > 400) a.gear = false;
             if (!a.handedOff && distNm(a.pos, ctx.th) > 3) { a.handedOff = true; this.radio(a, 'TWR', 'depart'); }
+            if (a.handedOff && !a.depChk && distNm(a.pos, ctx.th) > 6) { a.depChk = true; this.radio(a, 'DEP', 'depchk'); }
+            if (a.depChk && !a.ctrHand && distNm(a.pos, ctx.th) > 16) { a.ctrHand = true; this.radio(a, 'DEP', 'ctrhand'); }
             if (distNm(a.pos, ctx.th) > 25 || a.alt - ctx.elev > 12000) a.state = 'gone';
           }
           a.pos = move(a.pos, a.hdg, a.v * KT * dt);
@@ -574,6 +576,8 @@
         }
         case 'approach': {
           a.d = distNm(a.pos, ctx.th);
+          if (!a.appChk) { a.appChk = true; this.radio(a, 'APP', 'appchk'); }
+          if (a.d < 9 && !a.estab) { a.estab = true; this.radio(a, 'TWR', 'estab'); }
           // espacement : au moins 3 NM derrière l'avion qui précède sur la finale
           const ahead = this.arrivalAhead(a);
           let target = a.d > 5 ? 160 : 140;
@@ -624,9 +628,10 @@
         case 'vacate':
         case 'taxi_in': {
           const doneP = this.followPath(a, dt, a.state === 'vacate' ? 14 : 16);
-          if (a.state === 'vacate' && Airport.alongRunway(a.pos, ctx.th, ctx.end).xt > 70) a.state = 'taxi_in';
+          if (a.state === 'vacate' && Airport.alongRunway(a.pos, ctx.th, ctx.end).xt > 70) { a.state = 'taxi_in'; this.radio(a, 'GND', 'gndin'); }
           if (doneP) {
             a.state = 'parked_in'; a.until = t + 45000; a.v = 0;
+            this.radio(a, 'GND', 'onstand');
             const g = a.gateTarget;
             if (g) { const sp = standPose(ctx.L, g); a.pos = sp.pos; a.hdg = sp.hdg; a.gateObj = g; }
           }
@@ -747,6 +752,12 @@
 
     // ---------- Contrôle de la Tour ----------
     control(ctx) {
+      // avions de passage : ils se présentent au Contrôle quand le joueur est sur cette fréquence (un toutes les 90 s)
+      const pst = this.engine && this.engine.station;
+      if (pst && pst.role === 'CTR' && this.tel && this.now - (this.lastCtr || 0) > 90000) {
+        const cand = this.ai.filter((x) => x.kind === 'enr' && x.pos && !x.ctrIn && x.state !== 'gone').sort((x, y) => distNm(this.tel, x.pos) - distNm(this.tel, y.pos));
+        if (cand[0]) { this.lastCtr = this.now; cand[0].ctrIn = true; this.radio(cand[0], 'CTR', 'ctrchk'); }
+      }
       // départs IA en attente au point d'arrêt
       const holding = this.ai.filter((a) => a.state === 'hold').sort((x, y) => x.holdSince - y.holdSince);
       const playerWaiting = this.engine && ['HOLDING', 'LINEUP'].includes(this.engine.phase) && ctx.side === 'dep' && this.engine.flags.waitDep;
@@ -772,6 +783,10 @@
       if (what === 'clearance') {
         a.pendingReq = true; a.state = 'clr_wait';
         this.radio(a, 'DEL', 'clearance', () => { a.gotClr = true; a.pendingReq = false; a.state = 'parked'; a.until = this.now + 60000; });
+      }
+      if (what === 'push') {
+        a.pendingReq = true; a.state = 'push_wait';
+        this.radio(a, 'GND', 'push', () => { a.pushed = true; a.pendingReq = false; a.state = 'parked'; a.until = this.now + 30000; });
       }
       if (what === 'taxi') { a.pendingReq = true; this.radio(a, 'GND', 'taxi', () => { a.state = 'taxi_out'; a.pendingReq = false; }); a.state = 'taxi_wait'; }
       if (what === 'takeoff') {
@@ -803,7 +818,8 @@
       const rn = this.rwyOf(a).name;
       const rw = { text: rn, speech: digits(String(rn).replace(/[LRC]$/, ''), e.lang) + ({ L: e.T(' gauche', ' left'), R: e.T(' droite', ' right'), C: e.T(' centre', ' center') }[String(rn).slice(-1)] || '') };
       const W = e.wind ? e.wind(c.side) : null;
-      const st = e._st(role === 'DEL' ? 'DEL' : role === 'GND' ? 'GND' : 'TWR', c.side);
+      const st = role === 'CTR' ? e._st('CTR', e.station && e.station.role === 'CTR' ? e.station.side : 'ctr1') : e._st(['DEL', 'GND', 'TWR', 'DEP', 'APP'].includes(role) ? role : 'TWR', c.side);
+      const stx = { text: st.name, speech: st.name };
       let atc = null, pilot = null, req = null;
       const via = a.via && a.via.length ? { text: a.via.join(', '), speech: a.via.map((n) => digits(n, e.lang)).join(', ') } : null;
       switch (kind) {
@@ -815,6 +831,52 @@
           pilot = e.M(e.T('Autorisé à destination, piste', 'Cleared to destination, runway'), rw, ',', e.T('code transpondeur', 'squawk'), sqx, ',', cs);
           break;
         }
+        case 'push': {
+          const gt = a.gate ? { text: String(a.gate), speech: String(a.gate) } : null;
+          req = e.M(stx, ',', cs, ',', gt ? [e.T('parking', 'stand'), gt, ','] : null, e.T('demande repoussage et mise en route', 'request push-back and start-up'));
+          atc = e.M(cs, ',', e.T('repoussage approuvé, mise en route à votre convenance', 'push-back approved, start-up at your discretion'));
+          pilot = e.M(e.T('Repoussage approuvé, mise en route', 'Push-back approved, start-up'), ',', cs);
+          break;
+        }
+        case 'depchk': {
+          const n = Math.max(500, Math.round((a.alt || 3000) / 100) * 100);
+          req = e.M(stx, ',', cs, ',', e.T(`passant ${n} pieds en montée`, `passing ${n} feet climbing`));
+          atc = e.M(cs, ',', e.T('identifié radar, poursuivez la montée', 'radar contact, continue climb'));
+          break;
+        }
+        case 'ctrhand': {
+          const ct = e._st('CTR', 'ctr1');
+          atc = e.M(cs, ',', e.T('contactez', 'contact'), { text: ct.name, speech: ct.name }, e.fq(ct.freq), ',', e.T('au revoir', 'good day'));
+          pilot = e.M(e.fq(ct.freq), ',', e.T('au revoir', 'good day'), ',', cs);
+          break;
+        }
+        case 'ctrchk': {
+          const fl = e.alt(a.alt || 30000, 5000);
+          req = e.M(stx, ',', cs, ',', fl);
+          atc = e.M(cs, ',', e.T('bonjour, identifié radar', 'good day, radar contact'));
+          break;
+        }
+        case 'appchk': {
+          req = e.M(stx, ',', cs, ',', e.T('descendant vers 3000 pieds, ILS piste', 'descending 3000 feet, ILS runway'), rw);
+          atc = e.M(cs, ',', e.T('identifié radar, autorisé approche ILS piste', 'radar contact, cleared ILS approach runway'), rw, ',', e.T('rappelez établi', 'report established'));
+          pilot = e.M(e.T('Autorisé ILS piste', 'Cleared ILS runway'), rw, ',', e.T('rappellerons établi', 'wilco'), ',', cs);
+          break;
+        }
+        case 'estab':
+          req = e.M(stx, ',', cs, ',', e.T('établi ILS piste', 'established ILS runway'), rw);
+          atc = e.M(cs, ',', e.T('bonjour, continuez l\'approche', 'good day, continue approach'));
+          break;
+        case 'gndin': {
+          const gt = a.gate ? { text: String(a.gate), speech: String(a.gate) } : null;
+          req = e.M(stx, ',', cs, ',', e.T('piste dégagée, demande roulage vers le parking', 'runway vacated, request taxi to the stand'));
+          atc = e.M(cs, ',', e.T('roulez vers le parking', 'taxi to the stand'), gt);
+          pilot = e.M(e.T('Roulons vers le parking', 'Taxiing to the stand'), gt, ',', cs);
+          break;
+        }
+        case 'onstand':
+          req = e.M(stx, ',', cs, ',', e.T('au parking', 'on stand'));
+          atc = e.M(cs, ',', e.T('bien reçu, bonne journée', 'roger, good day'));
+          break;
         case 'taxi':
           pilot = e.M({ text: st.name, speech: st.name }, ',', cs, ',', e.T('prêt à rouler', 'ready to taxi'));
           atc = e.M(cs, ',', e.T("roulez point d'arrêt piste", 'taxi to holding point runway'), rw, via ? [',', e.T('via', 'via'), via] : null);
@@ -851,9 +913,11 @@
       const pilotFirst = kind === 'taxi';
       let msgs = pilotFirst ? [{ from: 'aipilot', m: pilot }, { from: 'atc', m: atc }] : [{ from: 'atc', m: atc }, { from: 'aipilot', m: pilot }];
       // l'avion IA collationne le roulage (route et piste)
-      if (kind === 'clearance') msgs = [{ from: 'aipilot', m: req }, { from: 'atc', m: atc }, { from: 'aipilot', m: pilot }];
+      const REQ3 = ['clearance', 'push', 'appchk', 'gndin'], REQ2 = ['depchk', 'ctrchk', 'estab', 'onstand'];
+      if (REQ3.includes(kind)) msgs = [{ from: 'aipilot', m: req }, { from: 'atc', m: atc }, { from: 'aipilot', m: pilot }];
+      if (REQ2.includes(kind)) msgs = [{ from: 'aipilot', m: req }, { from: 'atc', m: atc }];
       if (pilotFirst) msgs.push({ from: 'aipilot', m: e.M(e.T("Roulons point d'arrêt piste", 'Taxiing to holding point runway'), rw, via ? [',', e.T('via', 'via'), via] : null, ',', cs) });
-      this.queue.push({ role, side: c.side, station: st, cs: a.cs, msgs, after, at: this.now, lang: lang || e.lang });
+      this.queue.push({ role, side: st.side || c.side, station: st, cs: a.cs, msgs, after, at: this.now, lang: lang || e.lang });
     }
     // Les échanges sont émis l'un après l'autre, sans couper le joueur ni son contrôleur
     flushRadio() {
