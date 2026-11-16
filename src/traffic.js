@@ -507,7 +507,9 @@
       const ctx = { ...ctx0, th: R.th, end: R.end, hdg: R.hdg };
       switch (a.state) {
         case 'parked':
-          if (t > a.until) {
+          // une minute entre deux demandes d'avions IA (clairance ou roulage), pour ne pas saturer la radio
+          if (t > a.until && t - (this.lastAiReq || -1e9) >= 60000) {
+            this.lastAiReq = t;
             // d'abord la clairance à la Délivrance (si l'aéroport en a une), puis la demande de roulage au Sol
             const del = ctx0.side === 'dep' && this.engine && this.engine.flight && this.engine.flight.dep.freqs && this.engine.flight.dep.freqs.DEL;
             if (del && !a.gotClr) this.request(a, 'clearance'); else this.request(a, 'taxi');
@@ -737,7 +739,7 @@
       if (a.pendingReq) return;
       if (what === 'clearance') {
         a.pendingReq = true; a.state = 'clr_wait';
-        this.radio(a, 'DEL', 'clearance', () => { a.gotClr = true; a.pendingReq = false; a.state = 'parked'; a.until = this.now + (6 + this.rand() * 14) * 1000; });
+        this.radio(a, 'DEL', 'clearance', () => { a.gotClr = true; a.pendingReq = false; a.state = 'parked'; a.until = this.now + 60000; });
       }
       if (what === 'taxi') { a.pendingReq = true; this.radio(a, 'GND', 'taxi', () => { a.state = 'taxi_out'; a.pendingReq = false; }); a.state = 'taxi_wait'; }
       if (what === 'takeoff') {
