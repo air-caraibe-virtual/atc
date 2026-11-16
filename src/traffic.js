@@ -789,7 +789,9 @@
         }
       }
       const pilotFirst = kind === 'taxi';
-      const msgs = pilotFirst ? [{ from: 'aipilot', m: pilot }, { from: 'atc', m: atc }] : [{ from: 'atc', m: atc }, { from: 'aipilot', m: pilot }];
+      let msgs = pilotFirst ? [{ from: 'aipilot', m: pilot }, { from: 'atc', m: atc }] : [{ from: 'atc', m: atc }, { from: 'aipilot', m: pilot }];
+      // l'avion IA collationne le roulage (route et piste)
+      if (pilotFirst) msgs.push({ from: 'aipilot', m: e.M(e.T("Roulons point d'arrêt piste", 'Taxiing to holding point runway'), rw, via ? [',', e.T('via', 'via'), via] : null, ',', cs) });
       this.queue.push({ role, side: c.side, station: st, cs: a.cs, msgs, after, at: this.now, lang: lang || e.lang });
     }
     // Les échanges sont émis l'un après l'autre, sans couper le joueur ni son contrôleur

@@ -145,6 +145,7 @@
     'readback correct, report ready for start-up': ['colación correcta, notifique listo para puesta en marcha', 'Rücklesung korrekt, melden Sie anlassbereit', 'collazionamento corretto, riportate pronti alla messa in moto', 'cotejamento correto, reporte pronto para acionamento'],
     'push-back and start-up approved': ['remolque y puesta en marcha aprobados', 'Push-back und Anlassen genehmigt', 'push-back e messa in moto approvati', 'push-back e acionamento aprovados'],
     'start-up approved': ['puesta en marcha aprobada', 'Anlassen genehmigt', 'messa in moto approvata', 'acionamento aprovado'],
+    'Taxiing to holding point runway': ['Rodando al punto de espera pista', 'Rollen zum Rollhalt Piste', 'Rulliamo al punto attesa pista', 'Taxiando para o ponto de espera pista'],
     'taxi to holding point runway': ['ruede al punto de espera pista', 'rollen Sie zum Rollhalt Piste', 'rullate al punto attesa pista', 'taxie para o ponto de espera pista'],
     'Taxi to holding point runway': ['Rodamos al punto de espera pista', 'Rollen zum Rollhalt Piste', 'Rulliamo al punto attesa pista', 'Taxiando para o ponto de espera pista'],
     'traffic on short final,': ['tráfico en final corta,', 'Verkehr im kurzen Endanflug,', 'traffico in corto finale,', 'tráfego em final curta,'],
