@@ -497,7 +497,18 @@
     }
     groundAhead(a, dist) {
       const inFront = (from, hdg, p) => { const d = M(from, p); return d < dist && d > 1 && angDiff(bearing(from, p), hdg) < 35; };
-      // bloqué depuis trop longtemps : on passe (évite les blocages définitifs)
+      // le joueur au sol (pushback, roulage) : couloir large devant l'avion (envergure) et cercle de sécurité autour ;
+      // on l'attend toujours, on ne lui passe jamais à travers
+      const P = this.tel && this.tel.onGround && this.tel.lat != null ? this.tel : null;
+      if (P) {
+        const d = M(a.pos, P);
+        if (d > 1) {
+          const rel = angDiff(bearing(a.pos, P), a.hdg) * Math.PI / 180;
+          const f = d * Math.cos(rel), lat = Math.abs(d * Math.sin(rel));
+          if ((f > 0 && f < dist && lat < 45) || (d < 35 && rel < 1.9)) return true;
+        }
+      }
+      // bloqué par un autre avion IA depuis trop longtemps : on passe (évite les blocages définitifs)
       if (a.blockedSince && this.now - a.blockedSince > 45000) { if (this.now - a.blockedSince > 60000) a.blockedSince = null; return false; }
       let blocked = false;
       for (const o of this.ai) {
@@ -506,7 +517,6 @@
         if (inFront(o.pos, o.hdg, a.pos) && o.v < 1 && a.id < o.id) continue;
         blocked = true; break;
       }
-      if (!blocked && this.tel && this.tel.onGround && inFront(a.pos, a.hdg, this.tel)) blocked = true;
       if (blocked) { if (!a.blockedSince) a.blockedSince = this.now; } else a.blockedSince = null;
       return blocked;
     }
