@@ -213,7 +213,7 @@
         const vs = a.prevAlt != null && dt > 0 ? ((a.alt - a.prevAlt) / dt) * 60 : 0; a.prevAlt = a.alt;
         return {
         id: a.id, lat: a.pos.lat, lon: a.pos.lon, alt: a.alt, hdg: a.hdg, pitch: a.pitch, bank: a.bank || 0, v: a.static ? 0 : a.v, vs: a.onGround ? 0 : vs,
-        onGround: a.onGround, gear: a.gear, light: a.light, lights: lightMode(a),
+        onGround: a.onGround, gear: a.gear, light: a.light, lights: lightMode(a), eng: (a.static || a.state === 'parked' || a.state === 'parked_in') ? 0 : 1,
       }; }));
     }
 
