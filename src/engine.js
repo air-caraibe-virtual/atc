@@ -962,6 +962,7 @@
         case 'TAXI_IN': if (this.crossAhead()) add('cross_req', this.crossLabel(), true); add('on_stand', L('Au parking', 'On stand'), !this.crossAhead()); break;
         case 'DONE': break;
       }
+      if (['PRE', 'CLEARED', 'STARTUP', 'TAXI_OUT', 'TAXI_IN'].includes(this.phase) && this.traffic && this.traffic.hold) add('req_hold', L('Avions IA : attendez', 'AI traffic: hold position'));
       if (['PRE', 'CLEARED', 'STARTUP', 'TAXI_OUT', 'HOLDING', 'CLIMB', 'CRUISE', 'DESCENT', 'APPROACH'].includes(this.phase)) add('req_notam', L('Infos piste (NOTAM)', 'Runway info (NOTAM)'));
       return list;
     }
@@ -1000,6 +1001,7 @@
         case 'checkin_twr': { const ap = this.apWord(); return this.M(st, ',', cs, ',', this.T(`établi ${ap.fr} piste`, `established ${ap.en} runway`), this.rwy('arr')); }
         case 'go_around': return this.M(cs, ',', this.T('remise de gaz', 'going around'));
         case 'vacated': return this.M(st, ',', cs, ',', this.T('piste', 'runway'), this.rwy('arr'), this.T('dégagée', 'vacated'));
+        case 'req_hold': return this.M(st, ',', cs, ',', this.T('demande à tous les avions au sol de maintenir position, mouvements en cours', 'request all aircraft on the ground to hold position, movement in progress'));
         case 'on_stand': return this.M(cs, ',', this.T('au parking, merci et au revoir', 'on stand, thanks, good day'));
         case 'radio_check': return this.station ? this.M(st, ',', cs, ',', this.T('essai radio', 'radio check', { es: 'prueba de radio', de: 'Radiocheck', it: 'prova radio', pt: 'teste de rádio' }), this.fq(this.station.freq)) : null;
       }
@@ -1141,6 +1143,12 @@
             const rb = this.M(this.T('Maintenons avant la piste', 'Holding short runway'), this.rwyPair(ref), ',', cs);
             this._instruct(m, rb, () => { this.flags.crossWait = ref; });
           } else this._crossClear(ref);
+          break;
+        }
+        case 'req_hold': {
+          if (this.traffic && this.traffic.hold) this.traffic.hold(120000);
+          this._atc(this.M(cs, ',', this.T('bien reçu, à tous les avions, maintenez position', 'roger, all aircraft hold position')));
+          this._sys(this.U('Les avions IA au sol attendent 2 minutes.', 'AI aircraft on the ground will wait for 2 minutes.'));
           break;
         }
         case 'req_notam': {

@@ -121,6 +121,7 @@
     vacated: [[3, 'runway vacated', 'vacated', 'piste degagee', 'piste liberee', 'degage', 'pista libre', 'piste verlassen', 'pista liberata', 'pista livre'], [1, 'libre', 'livre']],
     on_stand: [[3, 'on stand', 'au parking', 'on blocks', 'al parcheggio', 'auf parkposition', 'en el puesto', 'na posicao'], [2, 'stand', 'parking', 'parcheggio', 'parkposition', 'estacionamiento', 'puesto']],
     cross_req: [[3, 'cross runway', 'request crossing', 'traverser', 'traversee', 'cruzar', 'cruce', 'kreuzen', 'attraversare', 'attraversamento', 'cruzar a pista']],
+    req_hold: [[3, 'avions ia attendez', 'avions ia attendre', 'tous les avions attendez', 'tous les avions maintenez position', 'trafic attendez', 'trafic maintenez position', 'faites attendre les avions', 'all aircraft hold position', 'all traffic hold', 'traffic hold position', 'hold all traffic', 'ai traffic hold', 'ai hold'], [2, 'avions attendez', 'avions maintenez', 'trafic attendre', 'aircraft hold position', 'hold traffic', 'traffic hold']],
     req_notam: [[3, 'notam', 'runway status', 'etat des pistes', 'estado de pistas', 'estado de las pistas', 'pistenzustand', 'stato delle piste', 'condicao das pistas']],
     checkin: [[2, 'passing', 'climbing', 'descending', 'en montee', 'en descente', 'passant', 'subiendo', 'descendiendo', 'pasando', 'steigen', 'sinken', 'in salita', 'in discesa', 'subindo', 'descendo'], [1, 'with you', 'avec vous']],
     checkin_twr: [[2, 'established', 'etabli', 'final', 'finale', 'ils'], [1, 'with you', 'avec vous']],

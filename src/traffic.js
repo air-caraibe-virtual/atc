@@ -484,7 +484,8 @@
     followPath(a, dt, speedKt) {
       // arrêt si un autre avion est juste devant (au sol)
       const ahead = this.groundAhead(a, 75);
-      const target = ahead ? 0 : speedKt;
+      const held = this.now < (this.holdUntil || 0) && ['taxi_out', 'taxi_in', 'vacate'].includes(a.state);
+      const target = ahead || held ? 0 : speedKt;
       a.v = a.v < target ? Math.min(target, a.v + 3 * dt) : Math.max(target, a.v - 6 * dt);
       let remain = a.v * KT * dt;
       while (remain > 0 && a.path.length > 1) {
@@ -528,7 +529,7 @@
       switch (a.state) {
         case 'parked':
           // 30 secondes entre deux demandes d'avions IA (clairance ou roulage), pour ne pas saturer la radio
-          if (t > a.until && t - (this.lastAiReq || -1e9) >= 30000) {
+          if (t > a.until && t >= (this.holdUntil || 0) && t - (this.lastAiReq || -1e9) >= 30000) {
             this.lastAiReq = t;
             // d'abord la clairance à la Délivrance (si l'aéroport en a une), puis la demande de roulage au Sol
             const del = ctx0.side === 'dep' && this.engine && this.engine.flight && this.engine.flight.dep.freqs && this.engine.flight.dep.freqs.DEL;
@@ -755,6 +756,8 @@
       }
     }
 
+    // le joueur demande aux avions IA au sol d'attendre (pushback, passage)
+    hold(ms) { this.holdUntil = this.now + (ms || 120000); }
     request(a, what) {
       if (a.pendingReq) return;
       if (what === 'clearance') {
