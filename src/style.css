@@ -230,3 +230,10 @@ input[type=checkbox] { accent-color: var(--accent); }
 #dlgAiHelp { z-index: 6000; }
 .ai-sub { display: flex; flex-direction: column; gap: 6px; } .ai-sub.hidden, .ai-key-only.hidden, #setAiModelRow.hidden { display: none; } .ai-sub code { background: rgba(255,255,255,.08); padding: 1px 5px; border-radius: 4px; }
 #aiCompanyUrlRow.hidden { display: none; }
+
+/* Mode testeur */
+.tester-on { font-size: 12px; padding: 8px 10px; border-radius: 8px; background: rgba(224,168,0,.12); border: 1px solid rgba(224,168,0,.35); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.tester-on.hidden, .tester-ask.hidden { display: none; }
+.tester-ask { display: flex; gap: 6px; align-items: center; }
+.tester-ask input { max-width: 180px; }
+#appVer { cursor: default; user-select: none; }

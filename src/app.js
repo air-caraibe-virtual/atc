@@ -6,7 +6,7 @@
   const api = window.sim || null; // absent si la page est ouverte hors de l'appli
 
   // ---------- Paramètres ----------
-  const DEFAULTS = { lang: 'fr', ttsEngine: 'neural', neuralVoice: 'auto', voice: '', rate: 1.05, volume: 1, radioFx: 'medium', squelch: true, pilotVoice: false, requireCom: false, autoCom: true, autoXpdr: true, autoReadback: true, autoPush: true, traffic: false, sbUser: '', mute: false, radioMode: 'auto', mic: false, micKey: 'Ctrl+Space', micModel: 'small', aiProvider: 'company', aiKey: '', aiModel: '', trafficMax: 16, v: 6 };
+  const DEFAULTS = { lang: 'fr', ttsEngine: 'neural', neuralVoice: 'auto', voice: '', rate: 1.05, volume: 1, radioFx: 'medium', squelch: true, pilotVoice: false, requireCom: false, autoCom: true, autoXpdr: true, autoReadback: true, autoPush: true, traffic: false, sbUser: '', mute: false, radioMode: 'auto', mic: false, micKey: 'Ctrl+Space', micModel: 'small', aiProvider: 'company', aiKey: '', aiModel: '', trafficMax: 16, tester: false, v: 7 };
   let S = { ...DEFAULTS };
   let stored = {};
   try { stored = JSON.parse(localStorage.getItem('atcsolo') || '{}') || {}; S = { ...DEFAULTS, ...stored }; } catch (_) {}
@@ -1304,7 +1304,7 @@
   }
   async function checkUpdate(manual) {
     if (!api || !api.updateCheck) return;
-    const u = await api.updateCheck(!!S.beta);
+    const u = await api.updateCheck(S.tester ? 'test' : S.beta ? 'beta' : 'stable'); // test : seulement en mode testeur
     if (u && u.ok && u.available) {
       try { if (!manual && localStorage.getItem('atcsolo-skip') === u.version) return; } catch (_) {}
       showUpdate(u, !manual);
@@ -1333,6 +1333,30 @@
   $('btnCheckUpd').onclick = () => { close($('dlgSettings')); checkUpdate(true); };
   $('setBeta').checked = !!S.beta;
   $('setBeta').onchange = (e) => { S.beta = e.target.checked; save(); try { localStorage.removeItem('atcsolo-skip'); } catch (_) {} };
+  // ---- Mode testeur : 7 clics sur le numéro de version, puis le code secret ----
+  // (seule l'empreinte du code est dans l'appli : impossible de le retrouver en fouillant les fichiers)
+  const TESTER_HASH = 'd2fc57ad7e7faae3f592059daf9752df98dd3365b2fae3a54a13e2c8427b7564';
+  function testerShow() { $('testerOn').classList.toggle('hidden', !S.tester); }
+  testerShow();
+  let verClicks = 0, verTimer = null;
+  $('appVer').addEventListener('click', () => {
+    verClicks++; clearTimeout(verTimer); verTimer = setTimeout(() => { verClicks = 0; }, 3000);
+    if (verClicks >= 7 && !S.tester) { verClicks = 0; $('testerAsk').classList.remove('hidden'); $('testerCode').focus(); }
+  });
+  async function testerTry() {
+    const code = $('testerCode').value.trim().toUpperCase();
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(code));
+    const hex = [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+    if (hex === TESTER_HASH) {
+      S.tester = true; save(); try { localStorage.removeItem('atcsolo-skip'); } catch (_) {}
+      $('testerAsk').classList.add('hidden'); $('testerCode').value = ''; testerShow();
+      addMessage({ from: 'system', text: '🧪 Mode testeur activé : ATC vous proposera les versions de test, avant les pilotes bêta.' });
+      checkUpdate(true);
+    } else { $('testerRes').textContent = 'Code incorrect'; }
+  }
+  $('btnTesterOk').onclick = testerTry;
+  $('testerCode').addEventListener('keydown', (e) => { if (e.key === 'Enter') testerTry(); });
+  $('btnTesterOff').onclick = () => { S.tester = false; save(); testerShow(); };
   // après une mise à jour : on montre aux pilotes ce qui a été ajouté ou retiré
   (async () => {
     if (!api || !api.appVersion) return;

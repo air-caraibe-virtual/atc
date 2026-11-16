@@ -55,6 +55,13 @@ jobs:
         run: |
           cd installer
           "/c/Program Files (x86)/NSIS/makensis.exe" -INPUTCHARSET UTF8 -V2 -DVERSION="${{ steps.v.outputs.version }}" -DNUMVER="${{ steps.v.outputs.numver }}" atc-solo.nsi
+      - name: Version de test (réservée au mode testeur)
+        if: steps.v.outputs.skip != 'true'
+        shell: bash
+        run: |
+          # « -test » : installateur renommé en .exe.test, invisible pour les pilotes (bêta comprise)
+          F="dist/ATC-Setup-${{ steps.v.outputs.version }}.exe"
+          if [[ "${{ steps.v.outputs.version }}" == *-test* ]]; then mv "$F" "$F.test"; echo "ASSET=$F.test" >> "$GITHUB_ENV"; else echo "ASSET=$F" >> "$GITHUB_ENV"; fi
       - name: Publier la version
         if: steps.v.outputs.skip != 'true'
         uses: softprops/action-gh-release@v2
@@ -63,4 +70,4 @@ jobs:
           name: ATC ${{ steps.v.outputs.version }}
           body_path: notes/${{ steps.v.outputs.version }}.md
           prerelease: ${{ steps.v.outputs.pre }}
-          files: dist/ATC-Setup-${{ steps.v.outputs.version }}.exe
+          files: ${{ env.ASSET }}

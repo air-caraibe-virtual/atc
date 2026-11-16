@@ -677,15 +677,20 @@ ipcMain.handle('update-attention', (_e, o) => {
     }
   } catch (_) {}
 });
-ipcMain.handle('update-check', async (_e, beta) => {
+// Trois canaux : « stable » (tous les pilotes), « beta » (pilotes qui ont coché la case),
+// « test » (mode testeur, réservé au responsable). Les versions de test ont un installateur
+// nommé « .exe.test » : les anciennes versions d'ATC ne le voient pas.
+ipcMain.handle('update-check', async (_e, channel) => {
   try {
-    // versions finales seulement, ou aussi les bêtas si le pilote l'a choisi
+    const ch = channel === true ? 'beta' : (['stable', 'beta', 'test'].includes(channel) ? channel : 'stable');
+    const exeRe = ch === 'test' ? /\.exe(\.test)?$/i : /\.exe$/i;
     const r = await net.fetch(`https://api.github.com/repos/${UPDATE_REPO}/releases?per_page=30`, { headers: { 'User-Agent': 'ATC-MSFS', Accept: 'application/vnd.github+json' } });
     if (!r.ok) return { ok: false, status: r.status };
-    const all = (await r.json()).filter((x) => !x.draft && (beta || !x.prerelease) && (x.assets || []).some((a) => /\.exe$/i.test(a.name)));
+    const allowed = (x) => !x.prerelease || ch === 'test' || (ch === 'beta' && /-beta/i.test(x.tag_name || ''));
+    const all = (await r.json()).filter((x) => !x.draft && allowed(x) && (x.assets || []).some((a) => exeRe.test(a.name)));
     if (!all.length) return { ok: true, current: app.getVersion(), available: false };
     const j = all.reduce((best, x) => (newer(x.tag_name, best.tag_name) ? x : best), all[0]);
-    const asset = (j.assets || []).find((a) => /\.exe$/i.test(a.name));
+    const asset = (j.assets || []).find((a) => exeRe.test(a.name));
     const version = String(j.tag_name || '').replace(/^v/i, '');
     return { ok: true, current: app.getVersion(), version, beta: !!j.prerelease, available: !!asset && newer(version, app.getVersion()), notes: j.body || '', name: j.name || version, url: asset && asset.browser_download_url, size: asset && asset.size };
   } catch (e) { return { ok: false, error: String(e.message || e) }; }

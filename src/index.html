@@ -255,7 +255,9 @@
       <label class="check"><input type="checkbox" id="setAutoPush"> <span>Repoussage automatique avec le tracteur de MSFS</span></label>
       <label class="check"><input type="checkbox" id="setAutoXpdr"> <span>Régler le transpondeur automatiquement après la clearance</span></label>
       <label class="check"><input type="checkbox" id="setBeta"> <span>Recevoir les versions bêta (nouveautés en avance, peuvent contenir des bugs)</span></label>
-      <div class="row version-row"><span id="appVer" class="hint">Version —</span><button id="btnCheckUpd" class="mini">Rechercher une mise à jour</button></div>
+      <div id="testerOn" class="tester-on hidden">🧪 Mode testeur actif : vous recevez les versions de test avant les pilotes. <button id="btnTesterOff" class="mini ghost">Désactiver</button></div>
+      <div class="row version-row"><span id="appVer" class="hint" title="">Version —</span><button id="btnCheckUpd" class="mini">Rechercher une mise à jour</button></div>
+      <div id="testerAsk" class="tester-ask hidden"><input id="testerCode" type="password" autocomplete="off" placeholder="Code testeur"><button id="btnTesterOk" class="mini">Valider</button><span id="testerRes" class="hint"></span></div>
       <div class="row end"><button id="btnTestVoice" class="ghost" data-i18n="testVoice">Tester la voix</button><button class="primary" data-close data-i18n="close">Fermer</button></div>
     </div>
   </div>
