@@ -12,7 +12,7 @@ let handle = null;
 let connected = false;
 let retryTimer = null;
 
-const DEF_TEL = 0, REQ_TEL = 0, DEF_FAC = 1, DEF_FENIX = 2, REQ_FENIX = 2, DEF_FENIX_XFER = 3, DEF_PARK = 4;
+const DEF_TEL = 0, REQ_TEL = 0, DEF_FAC = 1, DEF_FENIX = 2, REQ_FENIX = 2, DEF_FENIX_XFER = 3, DEF_PARK = 4, DEF_APP = 5;
 // ---- Trafic IA créé et piloté par ATC ----
 const DEF_AIPOS = 10, DEF_AIGND = 11, DEF_AIGEAR = 12, DEF_AIGEARPOS = 13, DEF_AILIGHT = 14, EV_LSET_BASE = 70, EV_GEAR_SET = 61, REQ_MODELS = 40, REQ_AI_BASE = 1000, REQ_AIGND_BASE = 5000;
 const EV_FRZ_LL = 50, EV_FRZ_ALT = 51, EV_FRZ_ATT = 52, EV_GEAR_UP = 53, EV_GEAR_DN = 54, EV_LAND_ON = 55, EV_LAND_OFF = 56, EV_BCN_ON = 57, EV_STROBE_ON = 58, EV_STROBE_OFF = 59, EV_ENG_AUTO = 60;
@@ -84,6 +84,10 @@ async function connectSim() {
     try {
       for (const f of ['OPEN AIRPORT', 'LATITUDE', 'LONGITUDE', 'ALTITUDE', 'OPEN TAXI_PARKING', 'TYPE', 'NAME', 'NUMBER', 'HEADING', 'RADIUS', 'BIAS_X', 'BIAS_Z', 'CLOSE TAXI_PARKING', 'CLOSE AIRPORT']) handle.addToFacilityDefinition(DEF_PARK, f);
     } catch (e) { console.warn('Parkings MSFS indisponibles', e); }
+    // Procédures d'approche (ILS, RNAV, VOR…) par piste
+    try {
+      for (const f of ['OPEN AIRPORT', 'LATITUDE', 'LONGITUDE', 'ALTITUDE', 'OPEN APPROACH', 'TYPE', 'RUNWAY_NUMBER', 'RUNWAY_DESIGNATOR', 'CLOSE APPROACH', 'CLOSE AIRPORT']) handle.addToFacilityDefinition(DEF_APP, f);
+    } catch (e) { console.warn('Approches MSFS indisponibles', e); }
 
     // Savoir si l'on est vraiment en vol (et pas dans les menus de MSFS)
     handle.subscribeToSystemEvent(EV_SIMSTART, 'SimStart');
@@ -143,6 +147,9 @@ async function connectSim() {
         } else if (r.type === FacilityDataType.TAXI_PARKING) {
           const type = d.readInt32(), name = d.readInt32(), number = d.readUint32(), heading = d.readFloat32(), radius = d.readFloat32(), bx = d.readFloat32(), bz = d.readFloat32();
           (p.parking = p.parking || []).push({ type, name, number, heading, radius, bx, bz });
+        } else if (r.type === FacilityDataType.APPROACH) {
+          const type = d.readInt32(), num = d.readInt32(), des = d.readInt32();
+          (p.approaches = p.approaches || []).push({ type, num, des });
         } else if (r.type === FacilityDataType.FREQUENCY) {
           const type = d.readInt32(), freq = d.readInt32(), name = d.readString64();
           p.freqs.push({ type, freq, name });
@@ -290,6 +297,30 @@ ipcMain.handle('airport-parking', (_e, icao) => new Promise((resolve) => {
   p.timer = setTimeout(() => { facPending.delete(id); resolve(null); }, 8000);
   facPending.set(id, p);
   try { handle.requestFacilityData(DEF_PARK, id, icao.toUpperCase()); }
+  catch (e) { clearTimeout(p.timer); facPending.delete(id); resolve(null); }
+}));
+
+// Procédures d'approche publiées pour chaque piste de l'aéroport (MSFS)
+ipcMain.handle('airport-approaches', (_e, icao) => new Promise((resolve) => {
+  if (!handle || !connected || !/^[A-Z0-9]{3,4}$/i.test(icao || '')) return resolve(null);
+  const id = facReq++;
+  const p = { airport: null, runways: [], freqs: [], parking: [], approaches: [], resolve: null, timer: null };
+  // types MSFS : 1 GPS, 2 VOR, 3 NDB, 4 ILS, 5 LOC, 6 SDF, 7 LDA, 8 VOR/DME, 9 NDB/DME, 10 RNAV, 11 LOC arrière
+  const KIND = { 1: 'RNAV', 2: 'VOR', 3: 'NDB', 4: 'ILS', 5: 'LOC', 6: 'LOC', 7: 'LOC', 8: 'VOR', 9: 'NDB', 10: 'RNAV' };
+  const DES = ['', 'L', 'R', 'C', 'W', 'A', 'B'];
+  p.resolve = (res) => {
+    if (!res || !res.airport) return resolve(null);
+    const seen = new Set(), out = [];
+    for (const a of res.approaches || []) {
+      const kind = KIND[a.type]; if (!kind || !a.num) continue;
+      const rwy = String(a.num).padStart(2, '0') + (DES[a.des] || '');
+      if (!seen.has(rwy + kind)) { seen.add(rwy + kind); out.push({ rwy, kind }); }
+    }
+    resolve(out);
+  };
+  p.timer = setTimeout(() => { facPending.delete(id); resolve(null); }, 8000);
+  facPending.set(id, p);
+  try { handle.requestFacilityData(DEF_APP, id, icao.toUpperCase()); }
   catch (e) { clearTimeout(p.timer); facPending.delete(id); resolve(null); }
 }));
 

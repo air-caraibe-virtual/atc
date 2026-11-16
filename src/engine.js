@@ -187,6 +187,8 @@
     'Vacating': ['Abandonamos la pista', 'Verlassen die Piste', 'Liberiamo', 'Livrando'],
   };
   const DICT_IDX = { es: 0, de: 1, it: 2, pt: 3 };
+  // variantes des phrases ILS pour les autres procédures (RNAV, VOR, NDB, localizer, à vue)
+  for (const k of ['localizer', 'RNAV', 'VOR', 'NDB', 'visual']) for (const key of Object.keys(DICT)) if (key.includes('ILS')) DICT[key.replace(/ILS/g, k)] = DICT[key].map((v) => v.replace(/ILS/g, k));
   const DIG_X = {
     es: ['cero', 'uno', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete', 'ocho', 'nueve'],
     de: ['null', 'eins', 'zwo', 'drei', 'vier', 'fünf', 'sechs', 'sieben', 'acht', 'neun'],
@@ -827,11 +829,35 @@
         rb: [this.T('réduisons', 'reducing', { es: 'reducimos', de: 'reduzieren auf', it: 'riduciamo', pt: 'reduzindo' }), this.spd(kt), until],
       };
     }
+    // Meilleure procédure pour la piste d'arrivée : ILS > localizer > RNAV > VOR > NDB > à vue
+    apKind() {
+      const f = this.flight, list = f && f.arr.approaches;
+      if (!list || !list.length) return 'ILS'; // pas de donnée : ILS par défaut
+      const rw = String(f.arr.rwy || '').toUpperCase(), num = rw.replace(/[LRC]$/, '');
+      const mine = list.filter((a) => a.rwy === rw || (!/[LRC]$/.test(a.rwy) && a.rwy === num));
+      for (const k of ['ILS', 'LOC', 'RNAV', 'VOR', 'NDB']) if (mine.some((a) => a.kind === k)) return k;
+      return 'VIS';
+    }
+    apWord() {
+      const k = this.apKind();
+      return { kind: k, fr: k === 'LOC' ? 'localizer' : k === 'VIS' ? 'à vue' : k, en: k === 'LOC' ? 'localizer' : k === 'VIS' ? 'visual' : k };
+    }
+    // conseil au pilote (interface) : quelle approche préparer et comment
+    approachAdvice() {
+      const f = this.flight, a = this.apWord(), list = f.arr.approaches, rw = f.arr.rwy;
+      const have = list && list.length ? [...new Set(list.filter((x) => x.rwy === rw || (!/[LRC]$/.test(x.rwy) && x.rwy === String(rw).replace(/[LRC]$/, ''))).map((x) => x.kind === 'LOC' ? 'LOC' : x.kind))] : null;
+      const hv = have && have.length ? have.join(', ') : null;
+      const frTip = { ILS: "Affichez la fréquence ILS dans le FMC/la radio nav, puis armez APPR.", LOC: "Pas de guidage vertical : suivez le localizer et descendez selon la procédure (LOC/APPR en latéral).", RNAV: "Chargez l'approche RNAV (GNSS) dans le FMC, vérifiez le FAF, puis armez APPR.", VOR: "Réglez le VOR de la piste sur la radio nav et suivez la radiale ; descente par paliers selon la carte.", NDB: "Réglez la balise NDB sur l'ADF et suivez le relèvement ; descente par paliers selon la carte.", VIS: "Aucune approche aux instruments publiée pour cette piste : approche à vue (PAPI, trajectoire à 3°)." };
+      const enTip = { ILS: 'Set the ILS frequency in the FMC / nav radio, then arm APPR.', LOC: 'No glide path: fly the localizer and descend per the chart.', RNAV: 'Load the RNAV (GNSS) approach in the FMC, check the FAF, then arm APPR.', VOR: 'Tune the runway VOR and follow the radial; step-down descent per the chart.', NDB: 'Tune the NDB on the ADF and follow the bearing; step-down descent per the chart.', VIS: 'No instrument approach published for this runway: visual approach (PAPI, 3° path).' };
+      const tail = hv ? this.U(` Disponibles : ${hv}.`, ` Available: ${hv}.`) : this.U(' (procédures non lues dans MSFS : ILS supposé).', ' (procedures not read from MSFS: ILS assumed).');
+      return this.U(`Approche conseillée piste ${rw} : ${a.kind === 'VIS' ? 'à vue' : a.fr}. ${frTip[a.kind]}${tail}`, `Recommended approach runway ${rw}: ${a.kind === 'VIS' ? 'visual' : a.en}. ${enTip[a.kind]}${tail}`);
+    }
     _approachClearance(afterGoAround) {
-      const ils = this.T('approche ILS piste', 'ILS approach runway');
+      const ap = this.apWord();
+      const ils = this.T(`approche ${ap.fr} piste`, `${ap.en} approach runway`);
       const fs = this.finalSpeed();
       const msg = this.M(this.cs(), ',', afterGoAround ? this.T('identifié radar,', 'radar contact,') : null, this.T('autorisé', 'cleared'), ils, this.rwy('arr'), ',', fs.atc, ',', this.T('rappelez établi', 'report established'));
-      const rb = this.M(this.T('Autorisé ILS piste', 'Cleared ILS runway'), this.rwy('arr'), ',', fs.rb, ',', this.T('rappellerons établi', 'wilco'), ',', this.cs());
+      const rb = this.M(this.T(`Autorisé ${ap.fr} piste`, `Cleared ${ap.en} runway`), this.rwy('arr'), ',', fs.rb, ',', this.T('rappellerons établi', 'wilco'), ',', this.cs());
       this._instruct(msg, rb, () => { this.phase = 'FINAL'; this.flags.appClr = true; this.clearDir = 'down'; this.cleared = this.flight.appAlt; });
     }
     _landingClearance(unprompted) {
@@ -887,7 +913,7 @@
         case 'CLIMB':
           if (this.station && this.station.role === 'CTR') list.push({ id: 'req_level', label: L('Demander un niveau', 'Request level'), preview: L('Choisissez un niveau de vol', 'Choose a flight level'), needsLevel: true, options: this.levelOptions() });
           break;
-        case 'FINAL': add('established', L('Établi ILS', 'Established'), true); break;
+        case 'FINAL': add('established', L('Établi ' + this.apWord().fr, 'Established'), true); break;
         case 'TWR_CHECKIN': add('checkin_twr', L('Premier contact Tour', 'Check in with Tower'), true); break;
         case 'LANDING': add('go_around', L('Remise de gaz', 'Going around')); break;
         case 'VACATING': add('vacated', L('Piste dégagée', 'Runway vacated'), true); break;
@@ -928,8 +954,8 @@
         case 'cross_req': { const c = this.crossAhead(); return c ? this.M(st, ',', cs, ',', this.T('avant la piste', 'holding short runway'), this.rwyPair(c)) : null; }
         case 'req_notam': { const a = this.flight[this.notamSide()]; return this.M(st, ',', cs, ',', this.T('demande état des pistes à', 'request runway status at'), { text: a.city, speech: a.city }); }
         case 'req_level': return arg ? this.M(st, ',', cs, ',', this.T('demande', 'request'), this.alt(arg, 0)) : null;
-        case 'established': return this.M(cs, ',', this.T('établi ILS piste', 'established ILS runway'), this.rwy('arr'));
-        case 'checkin_twr': return this.M(st, ',', cs, ',', this.T('établi ILS piste', 'established ILS runway'), this.rwy('arr'));
+        case 'established': { const ap = this.apWord(); return this.M(cs, ',', this.T(`établi ${ap.fr} piste`, `established ${ap.en} runway`), this.rwy('arr')); }
+        case 'checkin_twr': { const ap = this.apWord(); return this.M(st, ',', cs, ',', this.T(`établi ${ap.fr} piste`, `established ${ap.en} runway`), this.rwy('arr')); }
         case 'go_around': return this.M(cs, ',', this.T('remise de gaz', 'going around'));
         case 'vacated': return this.M(st, ',', cs, ',', this.T('piste', 'runway'), this.rwy('arr'), this.T('dégagée', 'vacated'));
         case 'on_stand': return this.M(cs, ',', this.T('au parking, merci et au revoir', 'on stand, thanks, good day'));
@@ -1050,14 +1076,15 @@
             }
           } else if (this.phase === 'APP_CHECKIN') {
             if (this.flags.goAround) { this.flags.goAround = false; this._approachClearance(true); break; }
+            const ap = this.apWord();
             const alt = this.alt(f.appAlt, f.arr.tl);
             const chgA = f.arr.rwyChange && f.arr.rwyChange.to ? [this.closureMsg({ rwys: [f.arr.rwyChange.from], until: f.arr.rwyChange.until, works: f.arr.rwyChange.works }), ','] : null;
             // vitesse d'approche intermédiaire
             const sp = [this.T('réduisez', 'reduce speed', { es: 'reduzca velocidad', de: 'reduzieren Sie auf', it: 'riducete velocità', pt: 'reduza velocidade' }), this.spd(220)];
             const spR = [this.T('réduisons', 'reducing', { es: 'reducimos', de: 'reduzieren auf', it: 'riduciamo', pt: 'reduzindo' }), this.spd(220)];
-            const m = this.M(cs, ',', this.T('identifié radar, descendez', 'radar contact, descend'), alt, ',', this.qnh('arr'), ',', sp, ',', chgA, this.T('prévoyez approche ILS piste', 'expect ILS approach runway'), this.rwy('arr'));
-            const rb = this.M(this.T('Descendons', 'Descend'), alt, ',', this.qnh('arr'), ',', spR, ',', this.T('ILS piste', 'ILS runway'), this.rwy('arr'), ',', cs);
-            this._instruct(m, rb, () => { this._setCleared(f.appAlt); this.clearDir = 'down'; this.phase = 'APPROACH'; });
+            const m = this.M(cs, ',', this.T('identifié radar, descendez', 'radar contact, descend'), alt, ',', this.qnh('arr'), ',', sp, ',', chgA, this.T(`prévoyez approche ${ap.fr} piste`, `expect ${ap.en} approach runway`), this.rwy('arr'));
+            const rb = this.M(this.T('Descendons', 'Descend'), alt, ',', this.qnh('arr'), ',', spR, ',', this.T(`${ap.fr} piste`, `${ap.en} runway`), this.rwy('arr'), ',', cs);
+            this._instruct(m, rb, () => { this._setCleared(f.appAlt); this.clearDir = 'down'; this.phase = 'APPROACH'; this._sys(this.approachAdvice()); });
           }
           break;
         }

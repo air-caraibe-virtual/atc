@@ -323,6 +323,11 @@
     [...sel.options].forEach((o) => { o.disabled = lockAll && okStep[o.value] && !okStep[o.value](); });
     if (sel.selectedOptions[0] && sel.selectedOptions[0].disabled) { const ok = [...sel.options].find((o) => !o.disabled); if (ok) sel.value = ok.value; }
     $('btnResume').disabled = !f;
+    // procédures d'approche de l'aéroport d'arrivée (lues dans MSFS, on réessaie toutes les minutes)
+    if (f && !demo && !f.arr.approaches && simStatus === 'connected' && api && api.airportApproaches && Date.now() - (f.arr._apT || 0) > 60000) {
+      f.arr._apT = Date.now();
+      api.airportApproaches(f.arr.icao).then((l) => { if (l && l.length && engine.flight === f) f.arr.approaches = l; }).catch(() => {});
+    }
     $('demoBox').classList.toggle('hidden', !demo);
 
     // auto-réglage COM1 au changement de contrôleur
