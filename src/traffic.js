@@ -60,6 +60,7 @@
     const t = (f && f[0].toUpperCase()) || (a && a[0].toUpperCase()) || '';
     return TYPE_NAMES[t] || t;
   }
+  const GENERIC_LIVERY = /(ZZZZ|generic|default|white|blank|unpainted|no ?livery|base ?model|\bbase\b)/i;
   const NOT_AIRLINER = /(cargo|freighter|tanker|military|\bkc-|bizjet|private)/i;
 
   // ---- Type d'avion plausible pour un vol réel (OpenSky ne donne pas le type) ----
@@ -362,16 +363,19 @@
     // Modèle dont la livrée correspond à la compagnie du vol réel, sinon un avion de ligne au hasard
     modelFor(cs, size) {
       if (!this.models.length) return null;
+      // livrées génériques (blanches, sans compagnie) : à éviter tant qu'il existe de vraies livrées
+      const real = this.models.filter((m) => !GENERIC_LIVERY.test(m.title + ' ' + m.livery));
+      const all = real.length ? real : this.models;
       const code = cs.slice(0, 3);
       const re = (LIVERY_AIRLINES.find(([, c]) => c === code) || [])[0];
       // code OACI de la compagnie dans le titre ou la livrée (convention FSLTL : « …_AFR », « AFR … »), ou nom de la compagnie
       const codeRe = new RegExp('(^|[^A-Z0-9])' + code + '([^A-Z0-9]|$)');
-      const match = this.models.filter((m) => codeRe.test((m.title + ' ' + m.livery).toUpperCase()) || (re && (re.test(m.livery) || re.test(m.title))));
+      const match = all.filter((m) => codeRe.test((m.title + ' ' + m.livery).toUpperCase()) || (re && (re.test(m.livery) || re.test(m.title))));
       const pick = (l) => l[Math.floor(this.rand() * l.length)];
       // 1) bonne compagnie + type plausible ; 2) type plausible (autre livrée) ; 3) bonne compagnie ; 4) n'importe quel avion de ligne
       for (const s of SIZE_ORDER[size || 'narrow']) { const l = match.filter((m) => sizeOf(m) === s); if (l.length) return pick(l); }
-      for (const s of SIZE_ORDER[size || 'narrow']) { const l = this.models.filter((m) => sizeOf(m) === s); if (l.length) return pick(l); }
-      return pick(match.length ? match : this.models);
+      for (const s of SIZE_ORDER[size || 'narrow']) { const l = all.filter((m) => sizeOf(m) === s); if (l.length) return pick(l); }
+      return pick(match.length ? match : all);
     }
     newAircraft(kind, ctx, real, size) {
       const model = this.modelFor(real.cs, size || wantSize(real.cs, ctx.a && ctx.a.icao));
