@@ -17,15 +17,25 @@
   }
   // Position et cap d'un avion garé : parkings MSFS = centre et cap exacts ;
   // parkings OSM = point d'arrêt du nez, donc on recule l'avion d'une demi-longueur, nez vers le terminal
+  // distance (m) de p au nœud de taxiway le plus proche
+  function nearestTaxi(L, p) { let bd = Infinity; for (const [, c] of L.coords) { const d = M(p, c); if (d < bd) bd = d; } return bd; }
+  // Le nez doit regarder vers le terminal : la voie de circulation est derrière l'avion (côté queue).
+  // Si la voie est plutôt devant, on retourne l'avion de 180°.
+  function faceTerminal(L, p, hdg) {
+    if (!L || !L.coords || !L.coords.size) return hdg;
+    const dF = nearestTaxi(L, move(p, hdg, 45)), dB = nearestTaxi(L, move(p, (hdg + 180) % 360, 45));
+    return dF + 20 < dB ? (hdg + 180) % 360 : hdg;
+  }
   function standPose(L, g) {
     let node = null, bd = Infinity;
     for (const [, p] of L.coords) { const d = M(p, g); if (d > 25 && d < bd) { bd = d; node = p; } }
     const nodeHdg = node ? bearing(node, g) : null;
     // position exacte du parking MSFS ; cap : celui de la ligne d'entrée du stand (peint dans le décor) s'il est proche du cap MSFS,
-    // car le cap des données MSFS est parfois décalé par rapport aux lignes réelles
+    // car le cap des données MSFS est parfois décalé par rapport aux lignes réelles ; puis nez toujours vers le terminal
     if (g.msfs && g.hdg != null) {
-      const hdg = nodeHdg != null && angDiff(nodeHdg, g.hdg) <= 50 ? nodeHdg : g.hdg;
-      return { pos: { lat: g.lat, lon: g.lon }, hdg };
+      const h0 = nodeHdg != null && angDiff(nodeHdg, g.hdg) <= 50 ? nodeHdg : g.hdg;
+      const pos = { lat: g.lat, lon: g.lon };
+      return { pos, hdg: faceTerminal(L, pos, h0) };
     }
     const hdg = nodeHdg != null ? nodeHdg : 0;
     return { pos: move(g, (hdg + 180) % 360, 18), hdg };
@@ -848,5 +858,6 @@
     }
   }
 
+  Traffic.standPose = standPose;
   return Traffic;
 });
