@@ -303,6 +303,25 @@
       sel.innerHTML = ''; sel.dataset.lang = S.lang;
       RESUME_POINTS.forEach((p) => { const o = document.createElement('option'); o.value = p; o.textContent = PHASE_LABEL.fr[p] + (p === 'TWR_CHECKIN' ? ' (Tour)' : p === 'DEP_CHECKIN' ? ' (après décollage)' : ''); sel.appendChild(o); });
     }
+    // Les étapes de reprise s'activent selon la position réelle de l'avion
+    const dd = engine.dist(), dA = dd.arr, dD = dd.dep;
+    const air = !!(t && t.onGround === false && (t.agl == null || t.agl > 50));
+    const gnd = !!(t && t.onGround);
+    const alt = t && t.alt != null ? t.alt : 0;
+    const was = !!(engine.flags && engine.flags.wasAirborne);
+    const okStep = {
+      PRE: () => gnd && !was,
+      HOLDING: () => gnd && !was,
+      DEP_CHECKIN: () => air && (dD == null || dD < 80) && alt < 20000,
+      CRUISE: () => air && alt > 5000 && (dA == null || dA > 40),
+      DESCENT: () => air && alt > 4000 && (dA == null || (dA < 300 && dA > 20)),
+      APP_CHECKIN: () => air && (dA == null || dA < 70),
+      TWR_CHECKIN: () => air && (dA == null || dA < 20),
+      VACATING: () => gnd && (was || (dA != null && dA < 5)),
+    };
+    const lockAll = !!(f && !demo && t && t.connected);
+    [...sel.options].forEach((o) => { o.disabled = lockAll && okStep[o.value] && !okStep[o.value](); });
+    if (sel.selectedOptions[0] && sel.selectedOptions[0].disabled) { const ok = [...sel.options].find((o) => !o.disabled); if (ok) sel.value = ok.value; }
     $('btnResume').disabled = !f;
     $('demoBox').classList.toggle('hidden', !demo);
 
@@ -1413,7 +1432,7 @@
   $('btnFitRoute').onclick = () => { if (window.MapView) { MapView.setFollow(false); MapView.fitRoute(); } };
   $('btnCom').onclick = tuneCom;
   $('btnSquawk').onclick = setSquawk;
-  $('btnResume').onclick = () => engine.jumpTo($('selResume').value);
+  $('btnResume').onclick = () => { const o = $('selResume').selectedOptions[0]; if (o && o.disabled) return; engine.jumpTo($('selResume').value); };
   $('selDemoSpeed').onchange = (e) => { demoSpeed = +e.target.value; };
   // ATIS : en anglais en mode automatique (comme sur la plupart des grands aéroports)
   const showAtis = (side) => { const L = engine.radioMode === 'auto' ? 'en' : engine.lang; const a = engine.withLang(L, () => engine.atis(side)); if (a) addMessage({ from: 'atc', atis: true, lang: L, station: 'ATIS', freq: engine.flight[side].freqs.ATIS, text: a.text, speech: a.speech }); };
