@@ -510,12 +510,21 @@
         }
       }
       // bloqué par un autre avion IA depuis trop longtemps : on passe (évite les blocages définitifs)
-      if (a.blockedSince && this.now - a.blockedSince > 45000) { if (this.now - a.blockedSince > 60000) a.blockedSince = null; return false; }
+      if (a.blockedSince && this.now - a.blockedSince > 120000) { if (this.now - a.blockedSince > 135000) a.blockedSince = null; return false; }
+      const corridor = (from, hdg, p) => {
+        const d = M(from, p); if (d <= 1) return false;
+        const rel = angDiff(bearing(from, p), hdg) * Math.PI / 180;
+        return (d * Math.cos(rel) > 0 && d * Math.cos(rel) < dist && Math.abs(d * Math.sin(rel)) < 32) || (d < 30 && rel < 1.9);
+      };
+      const parkedLike = (o) => o.static || ['parked', 'parked_in', 'taxi_wait', 'clr_wait'].includes(o.state);
       let blocked = false;
       for (const o of this.ai) {
-        if (o === a || !o.onGround || !o.pos || !inFront(a.pos, a.hdg, o.pos)) continue;
-        // face à face : le plus ancien passe, l'autre attend
-        if (inFront(o.pos, o.hdg, a.pos) && o.v < 1 && a.id < o.id) continue;
+        if (o === a || !o.onGround || !o.pos) continue;
+        // avion garé : seul un avion juste devant gêne ; avion en mouvement : couloir large (envergure), carrefours compris
+        if (!(parkedLike(o) ? inFront(a.pos, a.hdg, o.pos) : corridor(a.pos, a.hdg, o.pos))) continue;
+        // chacun gêne l'autre (face à face, carrefour) : le plus ancien passe, l'autre attend
+        if (!parkedLike(o) && corridor(o.pos, o.hdg, a.pos) && a.id < o.id) continue;
+        if (parkedLike(o) && inFront(o.pos, o.hdg, a.pos) && o.v < 1 && a.id < o.id) continue;
         blocked = true; break;
       }
       if (blocked) { if (!a.blockedSince) a.blockedSince = this.now; } else a.blockedSince = null;
