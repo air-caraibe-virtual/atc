@@ -746,7 +746,8 @@
           }
           break;
         case 'APPROACH':
-          if (dArr != null && dArr < 18) return this._approachClearance();
+          if (this._nextDescentStep(dArr)) return;
+          if (dArr != null && ((dArr < 18 && this.cleared != null && this.cleared <= f.appAlt + 100) || dArr < 12)) return this._approachClearance();
           break;
         case 'FINAL':
           if (dArr != null && dArr < 8) return this._handoff('TWR', 'arr', null, () => { this.phase = 'TWR_CHECKIN'; });
@@ -829,6 +830,42 @@
         rb: [this.T('réduisons', 'reducing', { es: 'reducimos', de: 'reduzieren auf', it: 'riduciamo', pt: 'reduzindo' }), this.spd(kt), until],
       };
     }
+    // ----- paliers de descente d'approche -----
+    descentLadder() {
+      const f = this.flight;
+      return [...new Set([11000, 9000, 7000, 6000, 5000, 4000].filter((l) => l > f.appAlt && l <= f.descAlt).concat([f.appAlt]))].sort((a, b) => b - a);
+    }
+    // distance (NM) à partir de laquelle on peut descendre au palier l (pente d'environ 3°, avec de la marge)
+    stepGate(l) { return (l - (this.flight.arr.elev || 0)) / 300 + 8; }
+    // palier le plus bas autorisé à cette distance, strictement sous « below »
+    stepFor(d, below) {
+      const L = this.descentLadder().filter((l) => l < below && this.stepGate(l) >= d);
+      return L.length ? Math.min(...L) : null;
+    }
+    _descentMsg(lvl) {
+      const f = this.flight, cur = this.curAlt();
+      const verb = cur != null && cur <= lvl + 200 ? this.T('maintenez', 'maintain') : this.T('descendez', 'descend');
+      const q = lvl < f.arr.tl ? [',', this.qnh('arr')] : null;
+      const rbv = cur != null && cur <= lvl + 200 ? this.T('Maintenons', 'Maintaining') : this.T('Descendons', 'Descend');
+      return { m: this.M(this.cs(), ',', verb, this.alt(lvl, f.arr.tl), q), rb: this.M(rbv, this.alt(lvl, f.arr.tl), q, ',', this.cs()) };
+    }
+    // palier suivant quand l'avion est stabilisé au palier précédent
+    _nextDescentStep(dArr) {
+      const f = this.flight, cur = this.curAlt();
+      if (cur == null || dArr == null || this.cleared == null || this.cleared <= f.appAlt) return false;
+      if (cur > this.cleared + 400) return false;
+      const next = this.stepFor(dArr, this.cleared);
+      if (next == null) return false;
+      const x = this._descentMsg(next);
+      this._instruct(x.m, x.rb, () => { this._setCleared(next); this.clearDir = 'down'; });
+      return true;
+    }
+    // altitude minimale de la procédure (indicative, à vérifier sur la carte)
+    minimums() {
+      const f = this.flight, k = this.apKind(), elev = Math.round(f.arr.elev || 0);
+      const h = { ILS: 200, LOC: 400, RNAV: 350, VOR: 500, NDB: 600, VIS: 0 }[k];
+      return { kind: k, h, alt: elev + h };
+    }
     // Meilleure procédure pour la piste d'arrivée : ILS > localizer > RNAV > VOR > NDB > à vue
     apKind() {
       const f = this.flight, list = f && f.arr.approaches;
@@ -850,7 +887,11 @@
       const frTip = { ILS: "Affichez la fréquence ILS dans le FMC/la radio nav, puis armez APPR.", LOC: "Pas de guidage vertical : suivez le localizer et descendez selon la procédure (LOC/APPR en latéral).", RNAV: "Chargez l'approche RNAV (GNSS) dans le FMC, vérifiez le FAF, puis armez APPR.", VOR: "Réglez le VOR de la piste sur la radio nav et suivez la radiale ; descente par paliers selon la carte.", NDB: "Réglez la balise NDB sur l'ADF et suivez le relèvement ; descente par paliers selon la carte.", VIS: "Aucune approche aux instruments publiée pour cette piste : approche à vue (PAPI, trajectoire à 3°)." };
       const enTip = { ILS: 'Set the ILS frequency in the FMC / nav radio, then arm APPR.', LOC: 'No glide path: fly the localizer and descend per the chart.', RNAV: 'Load the RNAV (GNSS) approach in the FMC, check the FAF, then arm APPR.', VOR: 'Tune the runway VOR and follow the radial; step-down descent per the chart.', NDB: 'Tune the NDB on the ADF and follow the bearing; step-down descent per the chart.', VIS: 'No instrument approach published for this runway: visual approach (PAPI, 3° path).' };
       const tail = hv ? this.U(` Disponibles : ${hv}.`, ` Available: ${hv}.`) : this.U(' (procédures non lues dans MSFS : ILS supposé).', ' (procedures not read from MSFS: ILS assumed).');
-      return this.U(`Approche conseillée piste ${rw} : ${a.kind === 'VIS' ? 'à vue' : a.fr}. ${frTip[a.kind]}${tail}`, `Recommended approach runway ${rw}: ${a.kind === 'VIS' ? 'visual' : a.en}. ${enTip[a.kind]}${tail}`);
+      const lad = this.descentLadder().filter((l) => l <= (this.cleared || 99999)), mn = this.minimums();
+      const ladTxt = lad.length ? lad.join(' → ') + ' ft' : null;
+      const minFr = a.kind === 'VIS' ? ' Pas de minimum publié : stabilisé à 1000 ft sol, PAPI 3°.' : ` Altitude minimale ${mn.alt} ft (${mn.h} ft sol) : remettez les gaz si la piste n'est pas en vue.`;
+      const minEn = a.kind === 'VIS' ? ' No published minimum: stabilised by 1000 ft AGL, PAPI 3°.' : ` Minimum altitude ${mn.alt} ft (${mn.h} ft AGL): go around if the runway is not in sight.`;
+      return this.U(`Approche conseillée piste ${rw} : ${a.kind === 'VIS' ? 'à vue' : a.fr}. ${frTip[a.kind]}${tail}${ladTxt ? ' Paliers de descente : ' + ladTxt + '.' : ''}${minFr} (valeurs indicatives, voir la carte)`, `Recommended approach runway ${rw}: ${a.kind === 'VIS' ? 'visual' : a.en}. ${enTip[a.kind]}${tail}${ladTxt ? ' Step-down levels: ' + ladTxt + '.' : ''}${minEn} (indicative, check the chart)`);
     }
     _approachClearance(afterGoAround) {
       const ap = this.apWord();
@@ -1077,14 +1118,16 @@
           } else if (this.phase === 'APP_CHECKIN') {
             if (this.flags.goAround) { this.flags.goAround = false; this._approachClearance(true); break; }
             const ap = this.apWord();
-            const alt = this.alt(f.appAlt, f.arr.tl);
+            const dist0 = this.dist().arr;
+            const lvl0 = this.stepFor(dist0 == null ? 0 : dist0, Infinity), lvlA = lvl0 != null ? Math.min(lvl0, this.cleared != null ? this.cleared : lvl0) : (this.cleared != null ? this.cleared : f.descAlt);
+            const alt = this.alt(lvlA, f.arr.tl);
             const chgA = f.arr.rwyChange && f.arr.rwyChange.to ? [this.closureMsg({ rwys: [f.arr.rwyChange.from], until: f.arr.rwyChange.until, works: f.arr.rwyChange.works }), ','] : null;
             // vitesse d'approche intermédiaire
             const sp = [this.T('réduisez', 'reduce speed', { es: 'reduzca velocidad', de: 'reduzieren Sie auf', it: 'riducete velocità', pt: 'reduza velocidade' }), this.spd(220)];
             const spR = [this.T('réduisons', 'reducing', { es: 'reducimos', de: 'reduzieren auf', it: 'riduciamo', pt: 'reduzindo' }), this.spd(220)];
             const m = this.M(cs, ',', this.T('identifié radar, descendez', 'radar contact, descend'), alt, ',', this.qnh('arr'), ',', sp, ',', chgA, this.T(`prévoyez approche ${ap.fr} piste`, `expect ${ap.en} approach runway`), this.rwy('arr'));
             const rb = this.M(this.T('Descendons', 'Descend'), alt, ',', this.qnh('arr'), ',', spR, ',', this.T(`${ap.fr} piste`, `${ap.en} runway`), this.rwy('arr'), ',', cs);
-            this._instruct(m, rb, () => { this._setCleared(f.appAlt); this.clearDir = 'down'; this.phase = 'APPROACH'; this._sys(this.approachAdvice()); });
+            this._instruct(m, rb, () => { this._setCleared(lvlA); this.clearDir = 'down'; this.phase = 'APPROACH'; this._sys(this.approachAdvice()); });
           }
           break;
         }
